@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimMonitor - Spot Vital Signs (Cloud)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        /* ALL ORIGINAL STYLES PRESERVED */
+        body { 
+            background: #d1d3d4; color: #333; 
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            margin: 0; padding: 0; width: 480px; height: 800px; 
+            overflow: hidden; display: flex; flex-direction: column; 
+        }
+        .status-bar {
+            height: 35px; background: #a7a9ac; display: flex; 
+            justify-content: space-between; align-items: center;
+            padding: 0 15px; font-size: 0.75rem; font-weight: bold; color: #333;
+            border-bottom: 1px solid #808285;
+        }
+        .status-right { display: flex; align-items: center; gap: 10px; }
+        .battery-icon { 
+            width: 22px; height: 11px; border: 1.5px solid #333; 
+            border-radius: 2px; position: relative; padding: 1px;
+        }
+        #batt_level { height: 100%; background: #34c759; width: 98%; border-radius: 1px; transition: width 0.5s; }
+        .mini-btn { background: rgba(0,0,0,0.1); border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+        .power-off { background: #ff3b30; color: white; border: none; font-size: 1rem; }
+        .main-content { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex-grow: 1; }
+        .vital-card { 
+            background: white; border-radius: 15px; padding: 10px 20px; 
+            border: 1px solid #bcbec0; position: relative; display: flex; align-items: center; justify-content: center;
+        }
+        .label-group { position: absolute; top: 8px; left: 15px; display: flex; align-items: baseline; gap: 5px; }
+        .row-label { font-size: 0.9rem; font-weight: 800; color: #666; text-transform: uppercase; }
+        .row-unit { font-size: 0.65rem; color: #999; }
+        .row-value { font-size: 4.8rem; font-weight: 900; color: #cccccc; transition: color 0.3s; }
+        .hr-active { color: #1b8a4d !important; }
+        .spo2-active { color: #007ead !important; }
+        .temp-active { color: #8e44ad !important; }
+        .bp-active { color: #333 !important; }
+        .pulse-card { display: flex; justify-content: space-between; align-items: center; padding: 10px 25px; height: 110px; }
+        .bar-bg { height: 80px; width: 25px; background: rgba(0,0,0,0.05); border-radius: 4px; display: flex; align-items: flex-end; }
+        #pulse_bar { width: 100%; height: 0%; background: #1b8a4d; transition: height 0.1s; }
+        #bp_btn { background: #444; color: white; border: none; border-radius: 15px; font-size: 0.9rem; font-weight: 800; cursor: pointer; padding: 10px; }
+        .blinking { animation: blink 1s linear infinite; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+        #standby_screen, #loading_screen { 
+            position: fixed; top: 0; left: 0; width: 480px; height: 800px; 
+            background: #111; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; z-index: 1000; 
+        }
+        .power-btn-main { width: 120px; height: 120px; border-radius: 50%; border: 4px solid #444; background: none; color: #444; font-size: 4rem; cursor: pointer; }
+        .progress-container { width: 300px; height: 12px; background: #333; border-radius: 6px; margin-top: 25px; overflow: hidden; }
+        .progress-bar-fill { width: 0%; height: 100%; background: #0fec7d; transition: width 10s linear; }
+    </style>
+</head>
+<body>
+
+<div class="status-bar">
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <span>📶</span> <span id="sys_status_text">ID: ----</span>
+    </div>
+    
+    <div style="display: flex; align-items: center; gap: 5px;">
+        <button class="mini-btn" onclick="adjustVol(-0.1)">−</button>
+        <button class="mini-btn" id="mute_btn" onclick="toggleMute()" style="min-width: 25px;">🔊</button>
+        <button class="mini-btn" onclick="adjustVol(0.1)">+</button>
+        <span id="vol_label" style="font-size: 0.65rem; margin-left: 2px; width: 35px;">50%</span>
+    </div>
+
+    <div class="status-right">
+        <div class="battery-icon"><div id="batt_level"></div></div>
+        <button class="mini-btn power-off" id="mon_power_btn">⏻</button>
+    </div>
+</div>
+
+<div id="standby_screen"><button class="power-btn-main" onclick="startBoot()">⏻</button></div>
+<div id="loading_screen" style="display:none; color:white;">
+    INITIALIZING...
+    <div class="progress-container"><div class="progress-bar-fill" id="p_bar"></div></div>
+</div>
+
+<div class="main-content">
+    <div class="vital-card" style="height: 110px;"><div class="label-group"><span class="row-label">SYS</span><span class="row-unit">mmHg</span></div><div class="row-value" id="sys_v">---</div></div>
+    <div class="vital-card" style="height: 110px;"><div class="label-group"><span class="row-label">DIA</span><span class="row-unit">mmHg</span></div><div class="row-value" id="dia_v">---</div></div>
+    <div class="vital-card" style="height: 110px;"><div class="label-group"><span class="row-label">SpO2</span><span class="row-unit">%</span></div><div class="row-value" id="spo2_v">---</div></div>
+    <div class="vital-card pulse-card"><div class="label-group"><span class="row-label">Pulse</span><span class="row-unit">bpm</span></div><div class="row-value" id="hr_v">---</div><div class="bar-bg"><div id="pulse_bar"></div></div></div>
+    <div style="display: grid; grid-template-columns: 1fr 140px; gap: 8px; height: 125px;">
+        <div class="vital-card"><div class="label-group"><span class="row-label">Temp</span><span class="row-unit">°C</span></div><div class="row-value" id="temp_v" style="font-size: 3.5rem;">---</div></div>
+        <button id="bp_btn" onclick="runBP()">START BP CYCLE</button>
+    </div>
+</div>
+
+<script>
+    var socket = io();
+    
+    // --- CLOUD ROOM LOGIC ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomID = urlParams.get('room');
+    if (roomID) {
+        document.getElementById('sys_status_text').innerText = "ROOM: " + roomID;
+    } else {
+        document.getElementById('sys_status_text').innerText = "NO ROOM DETECTED";
+    }
+
+    let targetHR = 60, targetSpO2 = 98, t_sys = 120, t_dia = 80;
+    let hr_on = false, spo2_on = false, cycling = false, signalQuality = 'normal';
+    let hrDrift = 0, spo2Drift = 0;
+    let masterVolume = 0.5; 
+    let isMuted = false;
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function adjustVol(amt) {
+        masterVolume = Math.min(1.0, Math.max(0, masterVolume + amt));
+        updateVolUI();
+    }
+
+    function toggleMute() {
+        isMuted = !isMuted;
+        document.getElementById('mute_btn').innerText = isMuted ? "🔇" : "🔊";
+        updateVolUI();
+    }
+
+    function updateVolUI() {
+        const display = isMuted ? "OFF" : Math.round(masterVolume * 100) + "%";
+        document.getElementById('vol_label').innerText = display;
+    }
+
+    function startBoot() {
+        audioCtx.resume();
+        document.getElementById('standby_screen').style.display = 'none';
+        document.getElementById('loading_screen').style.display = 'flex';
+        setTimeout(() => { document.getElementById('p_bar').style.width = '100%'; }, 100);
+        setTimeout(() => {
+            document.getElementById('loading_screen').style.display = 'none';
+            // Join the specific room upon powering on
+            if(roomID) socket.emit('join', {room: roomID});
+            runAnimationLoop(); 
+            startDriftTimer();
+        }, 10000);
+    }
+
+    function updateDisplay() {
+        if (hr_on) {
+            let dHR = Math.max(0, parseInt(targetHR) + hrDrift);
+            document.getElementById('hr_v').innerText = (targetHR > 0) ? dHR : 0;
+            document.getElementById('hr_v').className = "row-value hr-active";
+        } else {
+            document.getElementById('hr_v').innerText = "---";
+            document.getElementById('hr_v').className = "row-value";
+        }
+        if (spo2_on) {
+            let dSPO2 = Math.min(100, Math.max(0, parseInt(targetSpO2) + spo2Drift));
+            document.getElementById('spo2_v').innerText = (targetHR > 0) ? dSPO2 : 0;
+            document.getElementById('spo2_v').className = "row-value spo2-active";
+        } else {
+            document.getElementById('spo2_v').innerText = "---";
+            document.getElementById('spo2_v').className = "row-value";
+        }
+    }
+
+    function playBeep() {
+        if (!hr_on || targetHR <= 0 || isMuted || masterVolume === 0) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        let freq = spo2_on ? 400 + (targetSpO2 * 5.6) : 800;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(masterVolume * 0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+        osc.connect(gain); 
+        gain.connect(audioCtx.destination);
+        osc.start(); 
+        osc.stop(audioCtx.currentTime + 0.12);
+    }
+
+    function runAnimationLoop() {
+        if(hr_on && targetHR > 0) {
+            let h = (signalQuality === 'poor') ? (Math.random() * 45 + 15) + "%" : "100%";
+            const bar = document.getElementById('pulse_bar');
+            bar.style.height = h;
+            playBeep();
+            setTimeout(() => { bar.style.height = "0%"; }, 150);
+            let interval = (60 / targetHR) * 1000;
+            setTimeout(runAnimationLoop, interval);
+        } else {
+            document.getElementById('pulse_bar').style.height = "0%";
+            setTimeout(runAnimationLoop, 1000);
+        }
+    }
+
+    function startDriftTimer() {
+        setInterval(() => {
+            if (hr_on && targetHR > 0) {
+                hrDrift = Math.floor(Math.random() * 5) - 2;
+                spo2Drift = Math.floor(Math.random() * 3) - 1;
+                updateDisplay();
+            }
+        }, 10000);
+    }
+
+    socket.on('update_monitor', (data) => {
+        if (data.type === 'vitals') {
+            targetHR = data.hr; 
+            targetSpO2 = data.spo2;
+            hr_on = data.hr_conn; 
+            spo2_on = data.spo2_conn;
+            signalQuality = data.signal_quality || 'normal';
+            updateDisplay(); 
+        } else if (data.type === 'system_reset') {
+            location.reload();
+        } else if (data.type === 'push_temp') {
+            document.getElementById('temp_v').innerText = data.temp;
+            document.getElementById('temp_v').className = "row-value temp-active";
+        } else if (data.type === 'set_target_bp') {
+            t_sys = data.sys; t_dia = data.dia;
+            if(!data.bp_conn) { 
+                document.getElementById('sys_v').innerText = "---"; 
+                document.getElementById('dia_v').innerText = "---"; 
+            }
+        }
+    });
+
+    function runBP() {
+        if (cycling) return; 
+        cycling = true;
+        const btn = document.getElementById('bp_btn');
+        btn.innerText = "INFLATING...";
+        document.getElementById('sys_v').innerText = "---";
+        document.getElementById('dia_v').innerText = "---";
+        document.getElementById('sys_v').classList.add('blinking');
+        document.getElementById('dia_v').classList.add('blinking');
+
+        setTimeout(() => {
+            document.getElementById('sys_v').classList.remove('blinking');
+            document.getElementById('dia_v').classList.remove('blinking');
+            document.getElementById('sys_v').innerText = t_sys;
+            document.getElementById('dia_v').innerText = t_dia;
+            document.getElementById('sys_v').className = "row-value bp-active";
+            document.getElementById('dia_v').className = "row-value bp-active";
+            btn.innerText = "START BP CYCLE"; cycling = false;
+        }, 13000);
+    }
+
+    // Long press power button to trigger shutdown
+    let pBtn = document.getElementById('mon_power_btn'), pTimer;
+    pBtn.addEventListener('mousedown', () => { pTimer = setTimeout(() => { if(confirm("Shutdown?")) location.reload(); }, 3000); });
+    pBtn.addEventListener('mouseup', () => clearTimeout(pTimer));
+</script>
+</body>
+</html>
