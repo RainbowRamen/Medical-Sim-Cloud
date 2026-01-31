@@ -121,6 +121,7 @@
     let hrDrift = 0, spo2Drift = 0;
     let masterVolume = 0.5; 
     let isMuted = false;
+    let isLoopRunning = false; // Prevents double-loop syncing issues
 
     const urlParams = new URLSearchParams(window.location.search);
     const roomCode = urlParams.get('room');
@@ -187,32 +188,51 @@
     }
 
     function playBeep() {
+        // Immediate check for mute to stop double-sound/sync issues
         if (!hr_on || targetHR <= 0 || isMuted || masterVolume === 0) return;
+
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         let freq = spo2_on ? 400 + (targetSpO2 * 5.6) : 800;
+        
         osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(masterVolume * 0.15, audioCtx.currentTime);
+        
+        // Anti-click ramping
+        gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(masterVolume * 0.1, audioCtx.currentTime + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+        
         osc.connect(gain); 
         gain.connect(audioCtx.destination);
         osc.start(); 
-        osc.stop(audioCtx.currentTime + 0.12);
+        osc.stop(audioCtx.currentTime + 0.15);
     }
 
     function runAnimationLoop() {
-        if(hr_on && targetHR > 0) {
-            let h = (signalQuality === 'poor') ? (Math.random() * 45 + 15) + "%" : "100%";
-            const bar = document.getElementById('pulse_bar');
-            bar.style.height = h;
-            playBeep();
-            setTimeout(() => { bar.style.height = "0%"; }, 150);
-            let interval = (60 / targetHR) * 1000;
-            setTimeout(runAnimationLoop, interval);
-        } else {
-            document.getElementById('pulse_bar').style.height = "0%";
-            setTimeout(runAnimationLoop, 1000);
-        }
+        if (isLoopRunning) return;
+        isLoopRunning = true;
+
+        const animate = () => {
+            if(hr_on && targetHR > 0) {
+                let h = (signalQuality === 'poor') ? (Math.random() * 45 + 15) + "%" : "100%";
+                const bar = document.getElementById('pulse_bar');
+                if (bar) bar.style.height = h;
+                
+                playBeep();
+                
+                setTimeout(() => { 
+                    if (bar) bar.style.height = "0%"; 
+                }, 150);
+
+                let interval = (60 / targetHR) * 1000;
+                setTimeout(animate, interval);
+            } else {
+                const bar = document.getElementById('pulse_bar');
+                if (bar) bar.style.height = "0%";
+                setTimeout(animate, 1000);
+            }
+        };
+        animate();
     }
 
     function startDriftTimer() {
