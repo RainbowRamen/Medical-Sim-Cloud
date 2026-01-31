@@ -38,8 +38,7 @@ def monitor():
         return "<h1>Room Code Required</h1><p>Please use the link from your controller.</p>"
     return render_template('monitor.html')
 
-# --- SOCKET LOGIC ---
-
+# --- Updated Room Initialization ---
 @socketio.on('join')
 def on_join(data):
     room = data.get('room')
@@ -47,11 +46,16 @@ def on_join(data):
         join_room(room)
         if room not in rooms_data:
             rooms_data[room] = {
-                'hr': 60, 'hr_conn': False, 'spo2': 98, 'spo2_conn': False,
-                'sys': 120, 'dia': 80, 'bp_conn': False, 'temp': 36.8,
+                'hr': 60, 
+                'hr_conn': False, 
+                'spo2': 98, 
+                'spo2_conn': False,
+                'sys': 120,    # Default set to 120
+                'dia': 80,     # Default set to 80
+                'bp_conn': False, 
+                'temp': 36.8,
                 'signal_quality': 'normal'
             }
-        emit('update_monitor', {'type': 'vitals', **rooms_data[room]}, room=room)
 
 @socketio.on('update_vitals')
 def handle_vitals(data):
@@ -81,3 +85,4 @@ def handle_shutdown(data):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     socketio.run(app, host='0.0.0.0', port=port)
+
