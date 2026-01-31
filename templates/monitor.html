@@ -3,289 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SimMonitor - Spot Vital Signs</title>
+    <title>SimMonitor - Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        * { box-sizing: border-box; }
-        body { background: #d1d3d4; color: #333; font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; display: flex; flex-direction: column; position: fixed; }
-        
-        /* UX IMPROVEMENT: Enlarged Status Bar */
-        .status-bar { height: 50px; background: #a7a9ac; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; font-size: 0.85rem; font-weight: bold; color: #333; border-bottom: 2px solid #808285; flex-shrink: 0; }
-        .status-right { display: flex; align-items: center; gap: 12px; }
-        
-        .battery-icon { width: 28px; height: 14px; border: 2px solid #333; border-radius: 3px; position: relative; padding: 1px; }
-        #batt_level { height: 100%; background: #34c759; width: 98%; border-radius: 1px; transition: width 0.5s; }
-        
-        /* UX IMPROVEMENT: Touch Feedback & Larger Buttons */
-        .mini-btn { background: rgba(0,0,0,0.1); border: 1.5px solid rgba(0,0,0,0.15); border-radius: 6px; height: 36px; min-width: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, background 0.1s; }
-        .mini-btn:active { transform: scale(0.92); background: rgba(0,0,0,0.3); }
-        
-        .power-off { background: #ff3b30; color: white; border: none; }
-        .power-off:active { background: #c62828; }
-        
-        .main-content { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; width: 100%; }
-        .vital-card { background: white; border-radius: 15px; padding: 10px 20px; border: 1.5px solid #bcbec0; position: relative; display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; width: 100%; }
-        .bottom-row { display: flex; gap: 8px; flex: 1.2; min-height: 0; width: 100%; }
-        .bottom-row .vital-card { flex: 1; }
-        
-        /* UX IMPROVEMENT: Larger BP Button and Label Labels */
-        #bp_btn { width: 150px; background: #444; color: white; border: none; border-radius: 15px; font-size: 0.95rem; font-weight: 800; cursor: pointer; padding: 10px; flex-shrink: 0; transition: transform 0.1s, background 0.1s; }
-        #bp_btn:active { transform: scale(0.96); background: #222; }
+        :root { --bg: #000; --hr: #34c759; --spo2: #00bcd4; --bp: #ffffff; --temp: #ff9500; --dim: #444; }
+        body { margin: 0; background: var(--bg); color: white; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; overflow: hidden; height: 100vh; }
 
-        .label-group { position: absolute; top: 10px; left: 18px; display: flex; align-items: baseline; gap: 6px; }
-        .row-label { font-size: 1.1rem; font-weight: 900; color: #444; text-transform: uppercase; }
-        .row-unit { font-size: 0.75rem; color: #888; font-weight: 700; }
-        
-        .row-value { font-size: clamp(3.5rem, 11vh, 7rem); font-weight: 900; color: #cccccc; transition: color 0.3s; line-height: 1; }
-        
-        .hr-active { color: #1b8a4d !important; }
-        .spo2-active { color: #007ead !important; }
-        .temp-active { color: #8e44ad !important; }
-        .bp-active { color: #333 !important; }
-        
-        .pulse-card { display: flex; justify-content: space-between; align-items: center; padding: 10px 25px; }
-        .bar-bg { height: 80%; width: 30px; background: rgba(0,0,0,0.05); border-radius: 4px; display: flex; align-items: flex-end; }
-        #pulse_bar { width: 100%; height: 0%; background: #1b8a4d; transition: height 0.1s; }
-        
-        .blinking { animation: blink 1s linear infinite; }
-        @keyframes blink { 50% { opacity: 0.3; } }
-        
-        #standby_screen, #loading_screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
-        .power-btn-main { width: 130px; height: 130px; border-radius: 50%; border: 4px solid #444; background: none; color: #444; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
-        .power-btn-main:active { background: #222; transform: scale(0.9); border-color: #666; }
-        
-        .progress-container { width: 300px; height: 12px; background: #333; border-radius: 6px; margin-top: 25px; overflow: hidden; }
-        .progress-bar-fill { width: 0%; height: 100%; background: #0fec7d; transition: width 3s linear; }
+        /* Startup Screen */
+        #startup { position: fixed; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; transition: opacity 0.5s; }
+        .logo-symbol { width: 80px; height: 80px; border: 4px solid var(--hr); border-radius: 20%; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+        .logo-symbol::after { content: "✚"; color: var(--hr); font-size: 3rem; }
+        .power-label { color: var(--hr); font-weight: 800; letter-spacing: 4px; font-size: 0.8rem; margin-bottom: 30px; }
+        .fs-btn { background: #222; color: white; border: 1px solid #444; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+        /* Top Bar */
+        .top-bar { height: 40px; background: #1a1a1a; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-weight: bold; color: #888; font-size: 0.9rem; }
+
+        /* Monitor Layout */
+        .main-display { display: grid; grid-template-columns: 1fr 300px; height: calc(100vh - 40px); }
+        .waveforms { padding: 20px; display: flex; flex-direction: column; gap: 40px; }
+        .vitals-sidebar { background: #111; display: flex; flex-direction: column; border-left: 2px solid #222; }
+
+        .vital-card { padding: 15px 20px; border-bottom: 1px solid #222; flex: 1; position: relative; }
+        .v-label { font-size: 0.8rem; font-weight: 900; }
+        .v-limit { position: absolute; font-size: 0.7rem; color: #666; right: 20px; text-align: right; line-height: 1.2; }
+        .v-value { font-size: 5.5rem; font-weight: 800; line-height: 1; margin-top: 5px; }
+        .v-status { font-size: 1.2rem; font-weight: 800; color: #ff3b30; margin-top: 10px; }
+        .v-unit { font-size: 1rem; color: #666; }
+
+        /* Waveform Drawing */
+        canvas { width: 100%; height: 120px; }
     </style>
 </head>
 <body>
 
-<div class="status-bar">
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
-        <span id="sys_status_text" style="font-size: 0.9rem;">SYSTEM READY</span>
-    </div>
-    <div style="display: flex; align-items: center; gap: 8px;">
-        <button class="mini-btn" onclick="adjustVol(-0.1)" aria-label="Decrease Volume">−</button>
-        <button class="mini-btn" id="mute_btn" onclick="toggleMute()" style="min-width: 44px;">
-            <svg id="vol_icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-        </button>
-        <button class="mini-btn" onclick="adjustVol(0.1)" aria-label="Increase Volume">+</button>
-        <span id="vol_label" style="font-size: 0.75rem; margin-left: 5px; width: 40px;">50%</span>
-    </div>
-    <div class="status-right">
-        <button class="mini-btn" onclick="toggleFullScreen()">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
-        </button>
-        <div class="battery-icon"><div id="batt_level"></div></div>
-        <button class="mini-btn power-off" id="mon_power_btn">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
-        </button>
-    </div>
+<div id="startup">
+    <div class="logo-symbol"></div>
+    <div class="power-label">POWER</div>
+    <button id="fs_button" class="fs-btn" onclick="goFullscreen()">ENTER FULLSCREEN</button>
 </div>
 
-<div id="standby_screen">
-    <button class="power-btn-main" onclick="startBoot()">
-        <svg viewBox="0 0 24 24" width="70" height="70" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
-    </button>
+<div class="top-bar">
+    <div id="room_display">SIMULATION MODE</div>
+    <div id="clock">00:00</div>
 </div>
 
-<div id="loading_screen" style="display:none; color:white; font-weight: bold; letter-spacing: 2px;">
-    INITIALIZING...
-    <div class="progress-container"><div class="progress-bar-fill" id="p_bar"></div></div>
-</div>
+<div class="main-display">
+    <div class="waveforms">
+        <div id="hr_wave_box"><canvas id="ecgCanvas"></canvas></div>
+        <div id="spo2_wave_box"><canvas id="spo2Canvas"></canvas></div>
+    </div>
 
-<div class="main-content">
-    <div class="vital-card">
-        <div class="label-group"><span class="row-label">SYS</span><span class="row-unit">mmHg</span></div>
-        <div class="row-value" id="sys_v">---</div>
-    </div>
-    <div class="vital-card">
-        <div class="label-group"><span class="row-label">DIA</span><span class="row-unit">mmHg</span></div>
-        <div class="row-value" id="dia_v">---</div>
-    </div>
-    <div class="vital-card">
-        <div class="label-group"><span class="row-label">SpO2</span><span class="row-unit">%</span></div>
-        <div class="row-value" id="spo2_v">---</div>
-    </div>
-    <div class="vital-card pulse-card">
-        <div class="label-group"><span class="row-label">Pulse</span><span class="row-unit">bpm</span></div>
-        <div class="row-value" id="hr_v">---</div>
-        <div class="bar-bg"><div id="pulse_bar"></div></div>
-    </div>
-    <div class="bottom-row">
-        <div class="vital-card">
-            <div class="label-group"><span class="row-label">Temp</span><span class="row-unit">°C</span></div>
-            <div class="row-value" id="temp_v">---</div>
+    <div class="vitals-sidebar">
+        <div class="vital-card" style="color: var(--hr);">
+            <div class="v-limit">120<br>50</div>
+            <div class="v-label">HR <span class="v-unit">BPM</span></div>
+            <div id="hr_display" class="v-value">---</div>
+            <div id="hr_msg" class="v-status"></div>
         </div>
-        <button id="bp_btn" onclick="runBP()">START BP CYCLE</button>
+
+        <div class="vital-card" style="color: var(--spo2);">
+            <div class="v-limit"><br>90</div>
+            <div class="v-label">SpO2 <span class="v-unit">%</span></div>
+            <div id="spo2_display" class="v-value">---</div>
+            <div id="spo2_msg" class="v-status"></div>
+        </div>
+
+        <div class="vital-card" style="color: var(--bp);">
+            <div class="v-limit">140/90<br>90/60</div>
+            <div class="v-label">NIBP <span class="v-unit">mmHg</span></div>
+            <div id="bp_display" class="v-value">---</div>
+            <div id="bp_msg" class="v-status"></div>
+        </div>
+
+        <div class="vital-card" style="color: var(--temp); border-bottom: none;">
+            <div class="v-label">TEMP <span class="v-unit">°C</span></div>
+            <div id="temp_display" class="v-value">--.-</div>
+        </div>
     </div>
 </div>
 
 <script>
-    var socket = io({ transports: ['websocket'], upgrade: false });
-
-    let targetHR = 60, targetSpO2 = 98, t_sys = 120, t_dia = 80;
-    let hr_on = false, spo2_on = false, cycling = false, signalQuality = 'normal';
-    let hrDrift = 0, spo2Drift = 0;
-    let masterVolume = 0.5; 
-    let isMuted = false;
-    let isLoopRunning = false;
-
+    const socket = io({ transports: ['websocket'], upgrade: false });
     const urlParams = new URLSearchParams(window.location.search);
     const roomCode = urlParams.get('room');
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // 1. Fullscreen Logic
+    function goFullscreen() {
+        const doc = document.documentElement;
+        if (doc.requestFullscreen) doc.requestFullscreen();
+        else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen();
+        
+        document.getElementById('fs_button').style.display = 'none';
+        // Hide startup screen after a small delay
+        setTimeout(() => { document.getElementById('startup').style.opacity = '0'; }, 500);
+        setTimeout(() => { document.getElementById('startup').style.display = 'none'; }, 1000);
+    }
+
+    // 2. Real-time Clock Logic
+    function updateClock() {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        document.getElementById('clock').innerText = `${hh}:${mm}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
 
     socket.on('connect', () => {
         socket.emit('join', { room: roomCode, type: 'monitor' });
+        document.getElementById('room_display').innerText = `MONITOR: ${roomCode}`;
     });
 
-    function adjustVol(amt) {
-        masterVolume = Math.min(1.0, Math.max(0, masterVolume + amt));
-        updateVolUI();
-    }
-
-    function toggleMute() {
-        isMuted = !isMuted;
-        const icon = document.getElementById('vol_icon');
-        if(isMuted) {
-            icon.innerHTML = '<line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9l-5 5H2v-4h2l5-5z"></path><path d="M11 5v14"></path>';
-        } else {
-            icon.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>';
-        }
-        updateVolUI();
-    }
-
-    function updateVolUI() {
-        const display = isMuted ? "OFF" : Math.round(masterVolume * 100) + "%";
-        document.getElementById('vol_label').innerText = display;
-    }
-
-    function startBoot() {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        document.getElementById('standby_screen').style.display = 'none';
-        document.getElementById('loading_screen').style.display = 'flex';
-        socket.emit('monitor_powered_on', { room: roomCode });
-        setTimeout(() => { document.getElementById('p_bar').style.width = '100%'; }, 100);
-        setTimeout(() => {
-            document.getElementById('loading_screen').style.display = 'none';
-            runAnimationLoop(); 
-            startDriftTimer();
-        }, 3000); 
-    }
-
-    function updateDisplay() {
-        const hrEl = document.getElementById('hr_v');
-        const spo2El = document.getElementById('spo2_v');
-        if (hr_on) {
-            let dHR = Math.max(0, parseInt(targetHR) + hrDrift);
-            hrEl.innerText = (targetHR > 0) ? dHR : 0;
-            hrEl.className = "row-value hr-active";
-        } else {
-            hrEl.innerText = "---";
-            hrEl.className = "row-value";
-        }
-        if (spo2_on) {
-            let dSPO2 = Math.min(100, Math.max(0, parseInt(targetSpO2) + spo2Drift));
-            spo2El.innerText = (targetHR > 0) ? dSPO2 : 0;
-            spo2El.className = "row-value spo2-active";
-        } else {
-            spo2El.innerText = "---";
-            spo2El.className = "row-value";
-        }
-    }
-
-    function playBeep() {
-        if (!hr_on || targetHR <= 0 || isMuted || masterVolume === 0) return;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        let freq = spo2_on ? 400 + (targetSpO2 * 5.6) : 800;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(masterVolume * 0.1, audioCtx.currentTime + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
-        osc.connect(gain); 
-        gain.connect(audioCtx.destination);
-        osc.start(); 
-        osc.stop(audioCtx.currentTime + 0.15);
-    }
-
-    function runAnimationLoop() {
-        if (isLoopRunning) return;
-        isLoopRunning = true;
-        const animate = () => {
-            if(hr_on && targetHR > 0) {
-                let h = (signalQuality === 'poor') ? (Math.random() * 45 + 15) + "%" : "100%";
-                const bar = document.getElementById('pulse_bar');
-                if (bar) bar.style.height = h;
-                playBeep();
-                setTimeout(() => { if (bar) bar.style.height = "0%"; }, 150);
-                let interval = (60 / targetHR) * 1000;
-                setTimeout(animate, interval);
-            } else {
-                const bar = document.getElementById('pulse_bar');
-                if (bar) bar.style.height = "0%";
-                setTimeout(animate, 1000);
-            }
-        };
-        animate();
-    }
-
-    function startDriftTimer() {
-        setInterval(() => {
-            if (hr_on && targetHR > 0) {
-                hrDrift = Math.floor(Math.random() * 5) - 2;
-                spo2Drift = Math.floor(Math.random() * 3) - 1;
-                updateDisplay();
-            }
-        }, 10000);
-    }
-
-    socket.on('update_monitor', (data) => {
-        if (data.room && data.room !== roomCode) return;
+    socket.on('update_vitals', (data) => {
         if (data.type === 'vitals') {
-            targetHR = data.hr; targetSpO2 = data.spo2;
-            hr_on = data.hr_conn; spo2_on = data.spo2_conn;
-            signalQuality = data.signal_quality || 'normal';
-            updateDisplay(); 
-        } else if (data.type === 'system_reset') {
-            location.reload();
-        } else if (data.type === 'push_temp') {
-            document.getElementById('temp_v').innerText = data.temp;
-            document.getElementById('temp_v').className = "row-value temp-active";
-        } else if (data.type === 'set_target_bp') {
-            t_sys = data.sys; t_dia = data.dia;
-            if(!data.bp_conn) { 
-                document.getElementById('sys_v').innerText = "---"; 
-                document.getElementById('dia_v').innerText = "---"; 
+            if (data.hr_conn) {
+                document.getElementById('hr_display').innerText = data.hr;
+                document.getElementById('hr_msg').innerText = "";
+                document.getElementById('spo2_display').innerText = data.spo2;
+                document.getElementById('spo2_msg').innerText = "";
+            } else {
+                document.getElementById('hr_display').innerText = "---";
+                document.getElementById('hr_msg').innerText = "CONNECT SENSOR";
+                document.getElementById('spo2_display').innerText = "---";
+                document.getElementById('spo2_msg').innerText = "CONNECT SENSOR";
             }
         }
+
+        if (data.type === 'set_target_bp') {
+            if (data.bp_conn) {
+                document.getElementById('bp_display').innerText = `${data.sys}/${data.dia}`;
+                document.getElementById('bp_msg').innerText = "";
+            } else {
+                document.getElementById('bp_display').innerText = "---";
+                document.getElementById('bp_msg').innerText = "ATTACH CUFF";
+            }
+        }
+
+        if (data.type === 'push_temp') {
+            document.getElementById('temp_display').innerText = parseFloat(data.temp).toFixed(1);
+        }
+
+        if (data.type === 'system_reset') location.reload();
     });
 
-    function runBP() {
-        if (cycling) return; 
-        cycling = true;
-        const btn = document.getElementById('bp_btn');
-        btn.innerText = "INFLATING...";
-        document.getElementById('sys_v').innerText = "---";
-        document.getElementById('dia_v').innerText = "---";
-        document.getElementById('sys_v').classList.add('blinking');
-        document.getElementById('dia_v').classList.add('blinking');
-        setTimeout(() => {
-            document.getElementById('sys_v').classList.remove('blinking');
-            document.getElementById('dia_v').classList.remove('blinking');
-            document.getElementById('sys_v').innerText = t_sys;
-            document.getElementById('dia_v').innerText = t_dia;
-            document.getElementById('sys_v').className = "row-value bp-active";
-            document.getElementById('dia_v').className = "row-value bp-active";
-            btn.innerText = "START BP CYCLE"; cycling = false;
-        }, 8000);
-    }
-
-    function toggleFullScreen() {
-        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-        else document.exitFullscreen();
-    }
+    socket.on('system_shutdown', () => {
+        document.getElementById('startup').style.display = 'flex';
+        document.getElementById('startup').style.opacity = '1';
+        document.getElementById('fs_button').style.display = 'inline-block';
+    });
 </script>
 </body>
 </html>
