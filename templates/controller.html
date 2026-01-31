@@ -19,49 +19,50 @@
         
         .room-card { text-align: center; border-bottom: 4px solid var(--accent); padding: 10px; }
         .room-id { font-size: 1.8rem; font-weight: 900; letter-spacing: 4px; color: var(--accent); margin: 5px 0; }
-        #qr_img { width: 120px; height: 120px; margin-top: 5px; border-radius: 12px; border: 1px solid #eee; }
+        #qr_img { width: 110px; height: 110px; margin-top: 5px; border-radius: 12px; border: 1px solid #eee; }
 
-        /* UX IMPROVEMENT: Toggle and Label together */
+        /* Unified Toggle/Label Layout */
         .card-top { display: flex; justify-content: flex-start; align-items: center; gap: 12px; margin-bottom: 12px; }
         .label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #8e8e93; }
         .display-val { font-size: 2.2rem; font-weight: 800; color: #1c1c1e; }
         
-        .sync-row { display: flex; justify-content: space-between; align-items: center; background: #f2f2f7; padding: 6px 12px; border-radius: 12px; margin-bottom: 12px; }
+        /* Live Sync Grey Box - now matching toggle format */
+        .sync-row { display: flex; justify-content: flex-start; align-items: center; gap: 12px; background: #f2f2f7; padding: 8px 12px; border-radius: 12px; margin-bottom: 12px; }
 
         .controls { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
         .slider-wrapper { margin-top: 8px; }
         .slider-hint { font-size: 0.6rem; font-weight: 800; color: #8e8e93; margin-left: 54px; margin-bottom: -4px; }
         
-        /* UX IMPROVEMENT: Subtle colors that deepen on interaction */
+        /* Subtle vs Active Slider Styling */
         input[type=range] { flex-grow: 1; -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; outline: none; transition: background 0.2s; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #fff; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.2); border: 0.5px solid #d1d1d6; }
         
-        /* Base subtle colors */
-        #hr_s { background: #c5e1d1; } 
-        #spo2_s { background: #cce5ef; }
-        #sys_s, #dia_s { background: #d8d8d9; }
-        #temp_s { background: #e8daef; }
-
-        /* Deepen on active/focus */
-        #hr_s:active { background: #146639; }
-        #spo2_s:active { background: #005d82; }
-        #sys_s:active, #dia_s:active { background: #2c2c2e; }
-        #temp_s:active { background: #6b3482; }
+        #hr_s { background: #c5e1d1; } #hr_s:active { background: #146639; }
+        #spo2_s { background: #cce5ef; } #spo2_s:active { background: #005d82; }
+        #sys_s, #dia_s { background: #d8d8d9; } #sys_s:active, #dia_s:active { background: #2c2c2e; }
+        #temp_s { background: #e8daef; } #temp_s:active { background: #6b3482; }
 
         .step-btn { width: 44px; height: 44px; border-radius: 12px; border: none; background: #e5e5ea; font-size: 1.5rem; transition: transform 0.1s; }
         .step-btn:active { transform: scale(0.9); background: #d1d1d6; }
 
+        /* Pill Toggles */
         .switch { position: relative; display: inline-block; width: 51px; height: 31px; transition: transform 0.1s; flex-shrink: 0; }
         .switch:active { transform: scale(0.92); }
         .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #e5e5ea; transition: .3s; border-radius: 34px; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #d1d1d6; transition: .3s; border-radius: 34px; }
         .slider:before { position: absolute; content: ""; height: 27px; width: 27px; left: 2px; bottom: 2px; background: #fff; transition: .3s; border-radius: 50%; }
         input:checked + .slider { background: #34c759; }
         input:checked + .slider:before { transform: translateX(20px); }
 
+        /* Signal Quality Buttons */
+        .quality-group { display: flex; gap: 5px; margin-top: 10px; }
+        .q-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd; background: #f9f9f9; font-size: 0.7rem; font-weight: bold; cursor: pointer; transition: all 0.1s; }
+        .q-btn:active { transform: scale(0.95); }
+        .q-btn.active { background: var(--spo2); color: white; border-color: var(--spo2); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
         .btn-action { width: 100%; border: none; padding: 15px; border-radius: 12px; font-weight: bold; margin-top: 12px; font-size: 0.9rem; cursor: pointer; color: white; transition: all 0.2s; }
         .btn-action:active { transform: scale(0.97); filter: brightness(0.9); }
-        .btn-success { background: #34c759 !important; transform: scale(1.02); }
+        .btn-success { background: #34c759 !important; }
 
         .util-btn { border: none; border-radius: 8px; padding: 6px 12px; font-size: 0.7rem; font-weight: 700; cursor: pointer; background: #e5e5ea; transition: transform 0.1s; }
         .util-btn:active { transform: scale(0.94); }
@@ -71,10 +72,6 @@
         .btn-preset:active { transform: scale(0.95); }
         .p-normal { border-color: #34c759; color: #34c759; }
         .p-arrest { border-color: #ff3b30; color: #ff3b30; }
-
-        .quality-group { display: flex; gap: 5px; margin-top: 10px; }
-        .q-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd; background: #f9f9f9; font-size: 0.7rem; font-weight: bold; cursor: pointer; }
-        .q-btn.active { background: var(--spo2); color: white; border-color: var(--spo2); }
     </style>
 </head>
 <body>
@@ -92,7 +89,7 @@
     <div class="card room-card">
         <div class="label">Monitor Access Code</div>
         <div id="room_id_display" class="room-id">----</div>
-        <div id="qr_wrap"><img id="qr_img" src="" style="display:none;"></div>
+        <img id="qr_img" src="" style="display:none;">
         <button class="util-btn" style="margin-top:10px; width:100%; padding:10px;" onclick="copyMonitorLink()">📋 COPY MONITOR LINK</button>
     </div>
 
@@ -101,10 +98,12 @@
             <label class="switch"><input type="checkbox" id="p_conn" onchange="sendVitals()"><span class="slider"></span></label>
             <div class="label">SpO2 Probe Connected</div>
         </div>
+        
         <div class="sync-row">
-            <span style="font-size: 0.7rem; font-weight: 800; color: #666;">LIVE SYNC</span>
             <label class="switch" style="transform: scale(0.8);"><input type="checkbox" id="live_sync"><span class="slider"></span></label>
+            <span style="font-size: 0.7rem; font-weight: 800; color: #666;">LIVE SYNC TO MONITOR</span>
         </div>
+
         <div style="display: flex; gap: 20px;">
             <div><span class="display-val" id="hr_l" style="color: var(--hr-pulse);">60</span> <small>BPM</small></div>
             <div><span class="display-val" id="spo2_l" style="color: var(--spo2);">98</span> <small>%</small></div>
@@ -126,6 +125,7 @@
                 <button class="step-btn" onclick="step('spo2_s', 1)">+</button>
             </div>
         </div>
+
         <div class="label" style="margin-top:15px; font-size:0.6rem;">Live Signal Quality</div>
         <div class="quality-group">
             <button id="q_norm" class="q-btn active" onclick="setQuality('normal')">NORMAL</button>
@@ -159,22 +159,21 @@
         <button class="btn-action" id="btn_sync_bp" style="background: var(--bp);" onclick="triggerSync(this, sendBP)">SET BP TARGET</button>
     </div>
 
-<div class="card" style="border-left: 6px solid var(--temp);">
-    <div class="card-top">
-        <div class="label">Temperature Control</div>
-        <div class="display-val"><span id="temp_l">36.8</span>°</div>
-    </div>
-    
-    <div class="slider-wrapper">
-        <div class="slider-hint">CORE TEMP (°C)</div>
-        <div class="controls">
-            <button class="step-btn" onclick="step('temp_s', -0.1)">−</button>
-            <input type="range" id="temp_s" min="34.0" max="42.0" step="0.1" value="36.8" oninput="updateLabels()">
-            <button class="step-btn" onclick="step('temp_s', 0.1)">+</button>
+    <div class="card" style="border-left: 6px solid var(--temp);">
+        <div class="card-top">
+            <div class="label">Temperature Control</div>
+            <div class="display-val"><span id="temp_l">36.8</span>°</div>
         </div>
+        <div class="slider-wrapper">
+            <div class="slider-hint">CORE TEMP (°C)</div>
+            <div class="controls">
+                <button class="step-btn" onclick="step('temp_s', -0.1)">−</button>
+                <input type="range" id="temp_s" min="34.0" max="42.0" step="0.1" value="36.8" oninput="updateLabels()">
+                <button class="step-btn" onclick="step('temp_s', 0.1)">+</button>
+            </div>
+        </div>
+        <button class="btn-action" id="btn_sync_temp" style="background: var(--temp);" onclick="triggerSync(this, pushTemp)">PUSH TEMP TO MONITOR</button>
     </div>
-    <button class="btn-action" id="btn_sync_temp" style="background: var(--temp);" onclick="triggerSync(this, pushTemp)">PUSH TEMP TO MONITOR</button>
-</div>
 
     <div class="preset-grid">
         <button class="btn-preset p-normal" onclick="applyPreset('normal')">🟢 NORMAL</button>
@@ -194,8 +193,7 @@
         document.getElementById('status_text').innerText = "ONLINE";
         if(roomCode) {
             document.getElementById('room_id_display').innerText = roomCode;
-            const monitorUrl = window.location.origin + '/monitor?room=' + roomCode;
-            document.getElementById('qr_img').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(monitorUrl)}`;
+            document.getElementById('qr_img').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin + '/monitor?room=' + roomCode)}`;
             document.getElementById('qr_img').style.display = 'inline-block';
         }
         socket.emit('join', { room: roomCode, type: 'controller' });
@@ -206,7 +204,14 @@
         document.getElementById('status_text').innerText = "OFFLINE";
     });
 
-    // UX IMPROVEMENT: Sent! Feedback
+    // Fix: Proper Quality Button State Management
+    function setQuality(q) {
+        currentQuality = q;
+        document.getElementById('q_norm').classList.toggle('active', q === 'normal');
+        document.getElementById('q_poor').classList.toggle('active', q === 'poor');
+        if(document.getElementById('live_sync').checked) sendVitals();
+    }
+
     function triggerSync(btn, func) {
         const originalText = btn.innerText;
         btn.innerText = "SENT ✓";
@@ -263,9 +268,11 @@
         if(type === 'normal') {
             document.getElementById('hr_s').value = 75; document.getElementById('spo2_s').value = 98;
             document.getElementById('sys_s').value = 120; document.getElementById('dia_s').value = 80;
+            setQuality('normal');
         } else {
             document.getElementById('hr_s').value = 0; document.getElementById('spo2_s').value = 70;
             document.getElementById('sys_s').value = 0; document.getElementById('dia_s').value = 0;
+            setQuality('poor');
         }
         updateLabels();
     }
