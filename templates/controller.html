@@ -16,13 +16,18 @@
 
         .scroll-area { padding: 16px; overflow-y: auto; flex-grow: 1; padding-bottom: 30px; }
         .card { background: #fff; border-radius: 20px; padding: 16px; margin-bottom: 12px; border: 1px solid #e5e5ea; }
+        
+        /* Room Display Styling */
+        .room-card { text-align: center; border-bottom: 4px solid var(--accent); }
+        .room-id { font-size: 1.8rem; font-weight: 900; letter-spacing: 4px; color: var(--accent); margin: 5px 0; }
+        #qr_img { width: 140px; height: 140px; margin-top: 10px; border-radius: 12px; border: 1px solid #eee; }
+
         .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #8e8e93; }
         .display-val { font-size: 2.2rem; font-weight: 800; color: #1c1c1e; }
         
         .sync-row { display: flex; justify-content: space-between; align-items: center; background: #f2f2f7; padding: 8px 12px; border-radius: 12px; margin-bottom: 15px; }
 
-        /* Color Coordinated Sliders */
         .controls { display: flex; align-items: center; gap: 12px; margin-top: 5px; }
         .slider-wrapper { margin-top: 10px; }
         .slider-hint { font-size: 0.6rem; font-weight: 800; color: #8e8e93; margin-left: 56px; margin-bottom: -5px; }
@@ -30,11 +35,10 @@
         input[type=range] { flex-grow: 1; -webkit-appearance: none; appearance: none; height: 6px; background: #e5e5ea; border-radius: 3px; outline: none; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #fff; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.15); border: 0.5px solid #d1d1d6; }
         
-        /* Specific Slider Colors */
-        #hr_s { background: #c5e1d1; } /* Light Green */
-        #spo2_s { background: #cce5ef; } /* Light Blue */
-        #sys_s, #dia_s { background: #d8d8d9; } /* Light Gray */
-        #temp_s { background: #e8daef; } /* Light Purple */
+        #hr_s { background: #c5e1d1; }
+        #spo2_s { background: #cce5ef; }
+        #sys_s, #dia_s { background: #d8d8d9; }
+        #temp_s { background: #e8daef; }
 
         .step-btn { width: 44px; height: 44px; border-radius: 12px; border: none; background: #f2f2f7; font-size: 1.5rem; }
         .switch { position: relative; display: inline-block; width: 51px; height: 31px; }
@@ -72,6 +76,15 @@
 </div>
 
 <div class="scroll-area">
+    <div class="card room-card">
+        <div class="label">Monitor Access Code</div>
+        <div id="room_id_display" class="room-id">----</div>
+        <div id="qr_wrap">
+            <img id="qr_img" src="" style="display:none;">
+        </div>
+        <button class="util-btn" style="margin-top:10px; width:100%; padding:10px;" onclick="copyMonitorLink()">📋 COPY MONITOR LINK</button>
+    </div>
+
     <div class="card" style="border-left: 6px solid var(--hr-pulse);">
         <div class="card-top">
             <div class="label">Pulse Oximetry</div>
@@ -162,7 +175,6 @@
 </div>
 
 <script>
-    // FIX 1: Force WebSocket for Render stability
     var socket = io({
         transports: ['websocket'],
         upgrade: false
@@ -171,15 +183,22 @@
     let syncTimer = null;
     let currentQuality = 'normal';
 
-    // FIX 2: Get Room from URL
     const urlParams = new URLSearchParams(window.location.search);
     const roomCode = urlParams.get('room');
 
     socket.on('connect', () => {
         document.getElementById('status_dot').className = "dot online";
-        document.getElementById('status_text').innerText = "ONLINE (" + roomCode + ")";
+        document.getElementById('status_text').innerText = "ONLINE";
         
-        // FIX 3: Tell server this is the CONTROLLER for this room
+        // Update Room UI
+        if(roomCode) {
+            document.getElementById('room_id_display').innerText = roomCode;
+            const monitorUrl = window.location.origin + '/monitor?room=' + roomCode;
+            const qrImg = document.getElementById('qr_img');
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(monitorUrl)}`;
+            qrImg.style.display = 'inline-block';
+        }
+
         socket.emit('join', { room: roomCode, type: 'controller' });
     });
 
@@ -187,6 +206,12 @@
         document.getElementById('status_dot').className = "dot";
         document.getElementById('status_text').innerText = "OFFLINE";
     });
+
+    function copyMonitorLink() {
+        const monitorUrl = window.location.origin + '/monitor?room=' + roomCode;
+        navigator.clipboard.writeText(monitorUrl);
+        alert("Monitor Link Copied!");
+    }
 
     function setQuality(q) {
         currentQuality = q;
@@ -216,7 +241,6 @@
         }
     }
 
-    // FIX 4: Always include the Room Code in emits
     function sendVitals() {
         socket.emit('update_vitals', {
             room: roomCode,
