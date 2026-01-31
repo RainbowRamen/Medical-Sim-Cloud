@@ -12,7 +12,6 @@
         .status-bar { height: 50px; background: #a7a9ac; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; font-size: 0.85rem; font-weight: bold; color: #333; border-bottom: 2px solid #808285; flex-shrink: 0; }
         .status-right { display: flex; align-items: center; gap: 12px; }
         
-        /* ADDED: Clock Style */
         #clock_display { font-family: monospace; font-size: 1.1rem; background: rgba(0,0,0,0.05); padding: 2px 8px; border-radius: 4px; margin-right: 10px; }
 
         .battery-icon { width: 28px; height: 14px; border: 2px solid #333; border-radius: 3px; position: relative; padding: 1px; }
@@ -29,20 +28,19 @@
         .bottom-row { display: flex; gap: 8px; flex: 1.2; min-height: 0; width: 100%; }
         .bottom-row .vital-card { flex: 1; }
         
-        #bp_btn { width: 150px; background: #444; color: white; border: none; border-radius: 15px; font-size: 0.95rem; font-weight: 800; cursor: pointer; padding: 10px; flex-shrink: 0; transition: transform 0.1s, background 0.1s; }
+        #bp_btn { width: 180px; background: #444; color: white; border: none; border-radius: 15px; font-size: 0.95rem; font-weight: 800; cursor: pointer; padding: 10px; flex-shrink: 0; transition: transform 0.1s, background 0.1s; }
         #bp_btn:active { transform: scale(0.96); background: #222; }
 
         .label-group { position: absolute; top: 10px; left: 18px; display: flex; align-items: baseline; gap: 6px; }
         .row-label { font-size: 1.1rem; font-weight: 900; color: #444; text-transform: uppercase; }
         .row-unit { font-size: 0.75rem; color: #888; font-weight: 700; }
         
-        /* ADDED: Alarm Limit Labels */
         .alarm-limits { position: absolute; top: 10px; right: 18px; text-align: right; color: #a7a9ac; font-size: 0.7rem; font-weight: 800; line-height: 1.1; }
 
         .row-value { font-size: clamp(2rem, 10vh, 7rem); font-weight: 900; color: #cccccc; transition: color 0.3s; line-height: 1; text-align: center; }
         
-        /* ADDED: Alert Message Style */
-        .msg-overlay { font-size: 1.2rem; font-weight: 900; color: #ff3b30; }
+        /* CHANGED: Message Color to Grey */
+        .msg-overlay { font-size: 1.3rem; font-weight: 800; color: #888; letter-spacing: 1px; }
         
         .hr-active { color: #1b8a4d !important; }
         .spo2-active { color: #007ead !important; }
@@ -50,7 +48,9 @@
         .bp-active { color: #333 !important; }
         
         .pulse-card { display: flex; justify-content: space-between; align-items: center; padding: 10px 25px; }
-        .bar-bg { height: 80%; width: 30px; background: rgba(0,0,0,0.05); border-radius: 4px; display: flex; align-items: flex-end; }
+        
+        /* CHANGED: Pulse Bar fit */
+        .bar-bg { height: 50%; width: 25px; background: rgba(0,0,0,0.05); border-radius: 4px; display: flex; align-items: flex-end; align-self: flex-end; margin-bottom: 5px; }
         #pulse_bar { width: 100%; height: 0%; background: #1b8a4d; transition: height 0.1s; }
         
         .blinking { animation: blink 1s linear infinite; }
@@ -59,8 +59,6 @@
         #standby_screen, #loading_screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
         .power-btn-main { width: 130px; height: 130px; border-radius: 50%; border: 4px solid #1b8a4d; background: none; color: #1b8a4d; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; margin-bottom: 10px; }
         .power-btn-main:active { background: #1b8a4d; color: white; transform: scale(0.9); }
-        
-        /* ADDED: Power Label */
         .power-text { color: #1b8a4d; font-weight: 900; letter-spacing: 4px; font-size: 0.8rem; }
         
         .progress-container { width: 300px; height: 12px; background: #333; border-radius: 6px; margin-top: 25px; overflow: hidden; }
@@ -77,9 +75,13 @@
     
     <div class="status-right">
         <div id="clock_display">00:00</div>
+        <button class="mini-btn" onclick="adjustVol(-0.1)" aria-label="Decrease Volume">−</button>
         <button class="mini-btn" id="mute_btn" onclick="toggleMute()" style="min-width: 44px;">
             <svg id="vol_icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
         </button>
+        <button class="mini-btn" onclick="adjustVol(0.1)" aria-label="Increase Volume">+</button>
+        <span id="vol_label" style="font-size: 0.75rem; margin-left: 5px; width: 30px;">50%</span>
+
         <div class="battery-icon"><div id="batt_level"></div></div>
         <button class="mini-btn power-off" id="mon_power_btn" onclick="location.reload()">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
@@ -135,6 +137,10 @@
 
     let targetHR = 60, targetSpO2 = 98, t_sys = 120, t_dia = 80;
     let hr_on = false, spo2_on = false, bp_attached = false, cycling = false, signalQuality = 'normal';
+    
+    // Calculation state (for delay logic)
+    let calc_hr = false, calc_spo2 = false;
+
     let hrDrift = 0, spo2Drift = 0;
     let masterVolume = 0.5; 
     let isMuted = false;
@@ -144,7 +150,6 @@
     const roomCode = urlParams.get('room');
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // CLOCK LOGIC
     function updateClock() {
         const now = new Date();
         document.getElementById('clock_display').innerText = now.getHours().toString().padStart(2,'0') + ":" + now.getMinutes().toString().padStart(2,'0');
@@ -152,29 +157,10 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // STARTUP / FULLSCREEN LOGIC
-    function startBoot() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.log("Fullscreen blocked or not supported");
-            });
-        }
-
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        document.getElementById('standby_screen').style.display = 'none';
-        document.getElementById('loading_screen').style.display = 'flex';
-        socket.emit('monitor_powered_on', { room: roomCode });
-        setTimeout(() => { document.getElementById('p_bar').style.width = '100%'; }, 100);
-        setTimeout(() => {
-            document.getElementById('loading_screen').style.display = 'none';
-            runAnimationLoop(); 
-            startDriftTimer();
-        }, 3000); 
+    function adjustVol(amt) {
+        masterVolume = Math.min(1.0, Math.max(0, masterVolume + amt));
+        updateVolUI();
     }
-
-    socket.on('connect', () => {
-        socket.emit('join', { room: roomCode, type: 'monitor' });
-    });
 
     function toggleMute() {
         isMuted = !isMuted;
@@ -184,7 +170,35 @@
         } else {
             icon.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>';
         }
+        updateVolUI();
     }
+
+    function updateVolUI() {
+        const display = isMuted ? "OFF" : Math.round(masterVolume * 100) + "%";
+        document.getElementById('vol_label').innerText = display;
+    }
+
+    function startBoot() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => console.log("Fullscreen blocked"));
+        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        document.getElementById('standby_screen').style.display = 'none';
+        document.getElementById('loading_screen').style.display = 'flex';
+        socket.emit('monitor_powered_on', { room: roomCode });
+        setTimeout(() => { document.getElementById('p_bar').style.width = '100%'; }, 100);
+        setTimeout(() => {
+            document.getElementById('loading_screen').style.display = 'none';
+            // Trigger initial update to show "CONNECT SENSOR"
+            updateDisplay();
+            runAnimationLoop(); 
+            startDriftTimer();
+        }, 3000); 
+    }
+
+    socket.on('connect', () => {
+        socket.emit('join', { room: roomCode, type: 'monitor' });
+    });
 
     function updateDisplay() {
         const hrEl = document.getElementById('hr_v');
@@ -192,21 +206,37 @@
         const sysEl = document.getElementById('sys_v');
         const diaEl = document.getElementById('dia_v');
 
+        // HR Logic with Delay
         if (hr_on) {
-            let dHR = Math.max(0, parseInt(targetHR) + hrDrift);
-            hrEl.innerText = (targetHR > 0) ? dHR : 0;
-            hrEl.className = "row-value hr-active";
-            
-            let dSPO2 = Math.min(100, Math.max(0, parseInt(targetSpO2) + spo2Drift));
-            spo2El.innerText = (targetHR > 0) ? dSPO2 : 0;
-            spo2El.className = "row-value spo2-active";
+            if (calc_hr) {
+                hrEl.innerText = "---";
+                hrEl.className = "row-value blinking";
+            } else {
+                let dHR = Math.max(0, parseInt(targetHR) + hrDrift);
+                hrEl.innerText = (targetHR > 0) ? dHR : 0;
+                hrEl.className = "row-value hr-active";
+            }
         } else {
             hrEl.innerText = "CONNECT SENSOR";
             hrEl.className = "row-value msg-overlay";
+        }
+
+        // SpO2 Logic with Delay
+        if (spo2_on) {
+            if (calc_spo2) {
+                spo2El.innerText = "---";
+                spo2El.className = "row-value blinking";
+            } else {
+                let dSPO2 = Math.min(100, Math.max(0, parseInt(targetSpO2) + spo2Drift));
+                spo2El.innerText = (targetHR > 0) ? dSPO2 : 0;
+                spo2El.className = "row-value spo2-active";
+            }
+        } else {
             spo2El.innerText = "CONNECT SENSOR";
             spo2El.className = "row-value msg-overlay";
         }
 
+        // BP Logic
         if (!bp_attached && !cycling) {
             sysEl.innerText = "ATTACH CUFF";
             sysEl.className = "row-value msg-overlay";
@@ -216,7 +246,7 @@
     }
 
     function playBeep() {
-        if (!hr_on || targetHR <= 0 || isMuted) return;
+        if (!hr_on || targetHR <= 0 || isMuted || calc_hr) return;
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         let freq = (hr_on && spo2_on) ? 400 + (targetSpO2 * 5.6) : 800;
@@ -232,7 +262,8 @@
         if (isLoopRunning) return;
         isLoopRunning = true;
         const animate = () => {
-            if(hr_on && targetHR > 0) {
+            // Only pulse if connected and not calculating
+            if(hr_on && targetHR > 0 && !calc_hr) {
                 let h = (signalQuality === 'poor') ? (Math.random() * 45 + 15) + "%" : "100%";
                 const bar = document.getElementById('pulse_bar');
                 if (bar) bar.style.height = h;
@@ -262,15 +293,28 @@
     socket.on('update_monitor', (data) => {
         if (data.type === 'vitals') {
             targetHR = data.hr; targetSpO2 = data.spo2;
-            hr_on = data.hr_conn; spo2_on = data.spo2_conn;
+            
+            // Check for new connections to trigger delay
+            if (data.hr_conn && !hr_on) {
+                calc_hr = true;
+                setTimeout(() => { calc_hr = false; updateDisplay(); }, 2000);
+            }
+            if (data.spo2_conn && !spo2_on) {
+                calc_spo2 = true;
+                setTimeout(() => { calc_spo2 = false; updateDisplay(); }, 2000);
+            }
+
+            hr_on = data.hr_conn; 
+            spo2_on = data.spo2_conn;
             signalQuality = data.signal_quality || 'normal';
             updateDisplay(); 
-        } else if (data.type === 'system_reset') {
-            location.reload();
-        } else if (data.type === 'push_temp') {
+        } 
+        else if (data.type === 'system_reset') location.reload();
+        else if (data.type === 'push_temp') {
             document.getElementById('temp_v').innerText = parseFloat(data.temp).toFixed(1);
             document.getElementById('temp_v').className = "row-value temp-active";
-        } else if (data.type === 'set_target_bp') {
+        } 
+        else if (data.type === 'set_target_bp') {
             t_sys = data.sys; t_dia = data.dia;
             bp_attached = data.bp_conn;
             updateDisplay();
@@ -281,7 +325,7 @@
         if (cycling || !bp_attached) return; 
         cycling = true;
         const btn = document.getElementById('bp_btn');
-        btn.innerText = "INFLATING...";
+        btn.innerText = "INFLATING CUFF..."; // Changed Text
         document.getElementById('sys_v').innerText = "---";
         document.getElementById('dia_v').innerText = "---";
         document.getElementById('sys_v').className = "row-value blinking";
