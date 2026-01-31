@@ -9,25 +9,34 @@
         * { box-sizing: border-box; }
         body { background: #d1d3d4; color: #333; font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; display: flex; flex-direction: column; position: fixed; }
         
-        .status-bar { height: 35px; background: #a7a9ac; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; font-size: 0.75rem; font-weight: bold; color: #333; border-bottom: 1px solid #808285; flex-shrink: 0; }
-        .status-right { display: flex; align-items: center; gap: 10px; }
+        /* UX IMPROVEMENT: Enlarged Status Bar */
+        .status-bar { height: 50px; background: #a7a9ac; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; font-size: 0.85rem; font-weight: bold; color: #333; border-bottom: 2px solid #808285; flex-shrink: 0; }
+        .status-right { display: flex; align-items: center; gap: 12px; }
         
-        .battery-icon { width: 22px; height: 11px; border: 1.5px solid #333; border-radius: 2px; position: relative; padding: 1px; }
+        .battery-icon { width: 28px; height: 14px; border: 2px solid #333; border-radius: 3px; position: relative; padding: 1px; }
         #batt_level { height: 100%; background: #34c759; width: 98%; border-radius: 1px; transition: width 0.5s; }
         
-        .mini-btn { background: rgba(0,0,0,0.1); border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .power-off { background: #ff3b30; color: white; border: none; padding: 4px 6px; }
+        /* UX IMPROVEMENT: Touch Feedback & Larger Buttons */
+        .mini-btn { background: rgba(0,0,0,0.1); border: 1.5px solid rgba(0,0,0,0.15); border-radius: 6px; height: 36px; min-width: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, background 0.1s; }
+        .mini-btn:active { transform: scale(0.92); background: rgba(0,0,0,0.3); }
+        
+        .power-off { background: #ff3b30; color: white; border: none; }
+        .power-off:active { background: #c62828; }
         
         .main-content { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; width: 100%; }
-        .vital-card { background: white; border-radius: 15px; padding: 10px 20px; border: 1px solid #bcbec0; position: relative; display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; width: 100%; }
+        .vital-card { background: white; border-radius: 15px; padding: 10px 20px; border: 1.5px solid #bcbec0; position: relative; display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; width: 100%; }
         .bottom-row { display: flex; gap: 8px; flex: 1.2; min-height: 0; width: 100%; }
         .bottom-row .vital-card { flex: 1; }
         
-        #bp_btn { width: 140px; background: #444; color: white; border: none; border-radius: 15px; font-size: 0.9rem; font-weight: 800; cursor: pointer; padding: 10px; flex-shrink: 0; }
-        .label-group { position: absolute; top: 8px; left: 15px; display: flex; align-items: baseline; gap: 5px; }
-        .row-label { font-size: 0.9rem; font-weight: 800; color: #666; text-transform: uppercase; }
-        .row-unit { font-size: 0.65rem; color: #999; }
-        .row-value { font-size: clamp(3.5rem, 12vh, 7rem); font-weight: 900; color: #cccccc; transition: color 0.3s; line-height: 1; }
+        /* UX IMPROVEMENT: Larger BP Button and Label Labels */
+        #bp_btn { width: 150px; background: #444; color: white; border: none; border-radius: 15px; font-size: 0.95rem; font-weight: 800; cursor: pointer; padding: 10px; flex-shrink: 0; transition: transform 0.1s, background 0.1s; }
+        #bp_btn:active { transform: scale(0.96); background: #222; }
+
+        .label-group { position: absolute; top: 10px; left: 18px; display: flex; align-items: baseline; gap: 6px; }
+        .row-label { font-size: 1.1rem; font-weight: 900; color: #444; text-transform: uppercase; }
+        .row-unit { font-size: 0.75rem; color: #888; font-weight: 700; }
+        
+        .row-value { font-size: clamp(3.5rem, 11vh, 7rem); font-weight: 900; color: #cccccc; transition: color 0.3s; line-height: 1; }
         
         .hr-active { color: #1b8a4d !important; }
         .spo2-active { color: #007ead !important; }
@@ -35,15 +44,15 @@
         .bp-active { color: #333 !important; }
         
         .pulse-card { display: flex; justify-content: space-between; align-items: center; padding: 10px 25px; }
-        .bar-bg { height: 80%; width: 25px; background: rgba(0,0,0,0.05); border-radius: 4px; display: flex; align-items: flex-end; }
+        .bar-bg { height: 80%; width: 30px; background: rgba(0,0,0,0.05); border-radius: 4px; display: flex; align-items: flex-end; }
         #pulse_bar { width: 100%; height: 0%; background: #1b8a4d; transition: height 0.1s; }
         
         .blinking { animation: blink 1s linear infinite; }
         @keyframes blink { 50% { opacity: 0.3; } }
         
         #standby_screen, #loading_screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
-        .power-btn-main { width: 120px; height: 120px; border-radius: 50%; border: 4px solid #444; background: none; color: #444; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; }
-        .power-btn-main:active { background: #222; transform: scale(0.95); }
+        .power-btn-main { width: 130px; height: 130px; border-radius: 50%; border: 4px solid #444; background: none; color: #444; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .power-btn-main:active { background: #222; transform: scale(0.9); border-color: #666; }
         
         .progress-container { width: 300px; height: 12px; background: #333; border-radius: 6px; margin-top: 25px; overflow: hidden; }
         .progress-bar-fill { width: 0%; height: 100%; background: #0fec7d; transition: width 3s linear; }
@@ -52,36 +61,36 @@
 <body>
 
 <div class="status-bar">
-    <div style="display: flex; align-items: center; gap: 8px;">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
-        <span id="sys_status_text">SYSTEM READY</span>
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+        <span id="sys_status_text" style="font-size: 0.9rem;">SYSTEM READY</span>
     </div>
-    <div style="display: flex; align-items: center; gap: 5px;">
-        <button class="mini-btn" onclick="adjustVol(-0.1)">−</button>
-        <button class="mini-btn" id="mute_btn" onclick="toggleMute()" style="min-width: 35px;">
-            <svg id="vol_icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <button class="mini-btn" onclick="adjustVol(-0.1)" aria-label="Decrease Volume">−</button>
+        <button class="mini-btn" id="mute_btn" onclick="toggleMute()" style="min-width: 44px;">
+            <svg id="vol_icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
         </button>
-        <button class="mini-btn" onclick="adjustVol(0.1)">+</button>
-        <span id="vol_label" style="font-size: 0.65rem; margin-left: 2px; width: 35px;">50%</span>
+        <button class="mini-btn" onclick="adjustVol(0.1)" aria-label="Increase Volume">+</button>
+        <span id="vol_label" style="font-size: 0.75rem; margin-left: 5px; width: 40px;">50%</span>
     </div>
     <div class="status-right">
         <button class="mini-btn" onclick="toggleFullScreen()">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
         </button>
         <div class="battery-icon"><div id="batt_level"></div></div>
         <button class="mini-btn power-off" id="mon_power_btn">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
         </button>
     </div>
 </div>
 
 <div id="standby_screen">
     <button class="power-btn-main" onclick="startBoot()">
-        <svg viewBox="0 0 24 24" width="60" height="60" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+        <svg viewBox="0 0 24 24" width="70" height="70" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
     </button>
 </div>
 
-<div id="loading_screen" style="display:none; color:white;">
+<div id="loading_screen" style="display:none; color:white; font-weight: bold; letter-spacing: 2px;">
     INITIALIZING...
     <div class="progress-container"><div class="progress-bar-fill" id="p_bar"></div></div>
 </div>
@@ -121,14 +130,13 @@
     let hrDrift = 0, spo2Drift = 0;
     let masterVolume = 0.5; 
     let isMuted = false;
-    let isLoopRunning = false; // Prevents double-loop syncing issues
+    let isLoopRunning = false;
 
     const urlParams = new URLSearchParams(window.location.search);
     const roomCode = urlParams.get('room');
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     socket.on('connect', () => {
-        console.log("Joined room:", roomCode);
         socket.emit('join', { room: roomCode, type: 'monitor' });
     });
 
@@ -188,20 +196,14 @@
     }
 
     function playBeep() {
-        // Immediate check for mute to stop double-sound/sync issues
         if (!hr_on || targetHR <= 0 || isMuted || masterVolume === 0) return;
-
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         let freq = spo2_on ? 400 + (targetSpO2 * 5.6) : 800;
-        
         osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        
-        // Anti-click ramping
         gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
         gain.gain.linearRampToValueAtTime(masterVolume * 0.1, audioCtx.currentTime + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
-        
         osc.connect(gain); 
         gain.connect(audioCtx.destination);
         osc.start(); 
@@ -211,19 +213,13 @@
     function runAnimationLoop() {
         if (isLoopRunning) return;
         isLoopRunning = true;
-
         const animate = () => {
             if(hr_on && targetHR > 0) {
                 let h = (signalQuality === 'poor') ? (Math.random() * 45 + 15) + "%" : "100%";
                 const bar = document.getElementById('pulse_bar');
                 if (bar) bar.style.height = h;
-                
                 playBeep();
-                
-                setTimeout(() => { 
-                    if (bar) bar.style.height = "0%"; 
-                }, 150);
-
+                setTimeout(() => { if (bar) bar.style.height = "0%"; }, 150);
                 let interval = (60 / targetHR) * 1000;
                 setTimeout(animate, interval);
             } else {
