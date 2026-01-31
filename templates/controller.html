@@ -17,12 +17,12 @@
         .scroll-area { padding: 12px; overflow-y: auto; flex-grow: 1; padding-bottom: 30px; }
         .card { background: #fff; border-radius: 20px; padding: 16px; margin-bottom: 12px; border: 1px solid #e5e5ea; }
         
-        /* Room Display Styling */
         .room-card { text-align: center; border-bottom: 4px solid var(--accent); padding: 10px; }
         .room-id { font-size: 1.8rem; font-weight: 900; letter-spacing: 4px; color: var(--accent); margin: 5px 0; }
         #qr_img { width: 120px; height: 120px; margin-top: 5px; border-radius: 12px; border: 1px solid #eee; }
 
-        .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        /* UX IMPROVEMENT: Toggle and Label together */
+        .card-top { display: flex; justify-content: flex-start; align-items: center; gap: 12px; margin-bottom: 12px; }
         .label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #8e8e93; }
         .display-val { font-size: 2.2rem; font-weight: 800; color: #1c1c1e; }
         
@@ -32,35 +32,36 @@
         .slider-wrapper { margin-top: 8px; }
         .slider-hint { font-size: 0.6rem; font-weight: 800; color: #8e8e93; margin-left: 54px; margin-bottom: -4px; }
         
-        /* UX IMPROVEMENT: Deeper colors for selected sliders */
+        /* UX IMPROVEMENT: Subtle colors that deepen on interaction */
         input[type=range] { flex-grow: 1; -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; outline: none; transition: background 0.2s; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #fff; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.2); border: 0.5px solid #d1d1d6; }
         
-        /* High-Contrast Slider Tracks */
-        #hr_s { background: #146639; }   /* Deeper Green */
-        #spo2_s { background: #005d82; } /* Deeper Blue */
-        #sys_s, #dia_s { background: #2c2c2e; } /* Deeper Grey */
-        #temp_s { background: #6b3482; } /* Deeper Purple */
+        /* Base subtle colors */
+        #hr_s { background: #c5e1d1; } 
+        #spo2_s { background: #cce5ef; }
+        #sys_s, #dia_s { background: #d8d8d9; }
+        #temp_s { background: #e8daef; }
 
-        /* UX IMPROVEMENT: Feedback for Step Buttons */
+        /* Deepen on active/focus */
+        #hr_s:active { background: #146639; }
+        #spo2_s:active { background: #005d82; }
+        #sys_s:active, #dia_s:active { background: #2c2c2e; }
+        #temp_s:active { background: #6b3482; }
+
         .step-btn { width: 44px; height: 44px; border-radius: 12px; border: none; background: #e5e5ea; font-size: 1.5rem; transition: transform 0.1s; }
         .step-btn:active { transform: scale(0.9); background: #d1d1d6; }
 
-        .switch { position: relative; display: inline-block; width: 51px; height: 31px; transition: transform 0.1s; }
-        .switch:active { transform: scale(0.92); } /* Pill Toggle Feedback */
+        .switch { position: relative; display: inline-block; width: 51px; height: 31px; transition: transform 0.1s; flex-shrink: 0; }
+        .switch:active { transform: scale(0.92); }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #e5e5ea; transition: .3s; border-radius: 34px; }
         .slider:before { position: absolute; content: ""; height: 27px; width: 27px; left: 2px; bottom: 2px; background: #fff; transition: .3s; border-radius: 50%; }
         input:checked + .slider { background: #34c759; }
         input:checked + .slider:before { transform: translateX(20px); }
 
-        .quality-group { display: flex; gap: 5px; margin-top: 10px; }
-        .q-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd; background: #f9f9f9; font-size: 0.7rem; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
-        .q-btn:active { transform: scale(0.95); }
-        .q-btn.active { background: var(--spo2); color: white; border-color: var(--spo2); }
-
-        .btn-action { width: 100%; border: none; padding: 15px; border-radius: 12px; font-weight: bold; margin-top: 12px; font-size: 0.9rem; cursor: pointer; color: white; transition: transform 0.1s, filter 0.1s; }
+        .btn-action { width: 100%; border: none; padding: 15px; border-radius: 12px; font-weight: bold; margin-top: 12px; font-size: 0.9rem; cursor: pointer; color: white; transition: all 0.2s; }
         .btn-action:active { transform: scale(0.97); filter: brightness(0.9); }
+        .btn-success { background: #34c759 !important; transform: scale(1.02); }
 
         .util-btn { border: none; border-radius: 8px; padding: 6px 12px; font-size: 0.7rem; font-weight: 700; cursor: pointer; background: #e5e5ea; transition: transform 0.1s; }
         .util-btn:active { transform: scale(0.94); }
@@ -70,15 +71,16 @@
         .btn-preset:active { transform: scale(0.95); }
         .p-normal { border-color: #34c759; color: #34c759; }
         .p-arrest { border-color: #ff3b30; color: #ff3b30; }
+
+        .quality-group { display: flex; gap: 5px; margin-top: 10px; }
+        .q-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd; background: #f9f9f9; font-size: 0.7rem; font-weight: bold; cursor: pointer; }
+        .q-btn.active { background: var(--spo2); color: white; border-color: var(--spo2); }
     </style>
 </head>
 <body>
 
 <div class="utility-bar">
-    <div class="conn-status">
-        <div id="status_dot" class="dot"></div>
-        <span id="status_text">OFFLINE</span>
-    </div>
+    <div class="conn-status"><div id="status_dot" class="dot"></div><span id="status_text">OFFLINE</span></div>
     <div style="display:flex; gap:8px;">
         <button class="util-btn" style="background:#5856d6; color:white;" onclick="masterReset()">RESET SIM</button>
         <button class="util-btn" onclick="location.reload()">REFRESH</button>
@@ -90,16 +92,14 @@
     <div class="card room-card">
         <div class="label">Monitor Access Code</div>
         <div id="room_id_display" class="room-id">----</div>
-        <div id="qr_wrap">
-            <img id="qr_img" src="" style="display:none;">
-        </div>
+        <div id="qr_wrap"><img id="qr_img" src="" style="display:none;"></div>
         <button class="util-btn" style="margin-top:10px; width:100%; padding:10px;" onclick="copyMonitorLink()">📋 COPY MONITOR LINK</button>
     </div>
 
     <div class="card" style="border-left: 6px solid var(--hr-pulse);">
         <div class="card-top">
-            <div class="label">SpO2 Probe Connected</div>
             <label class="switch"><input type="checkbox" id="p_conn" onchange="sendVitals()"><span class="slider"></span></label>
+            <div class="label">SpO2 Probe Connected</div>
         </div>
         <div class="sync-row">
             <span style="font-size: 0.7rem; font-weight: 800; color: #666;">LIVE SYNC</span>
@@ -118,7 +118,6 @@
                 <button class="step-btn" onclick="step('hr_s', 1)">+</button>
             </div>
         </div>
-
         <div class="slider-wrapper">
             <div class="slider-hint">SPO2 %</div>
             <div class="controls">
@@ -127,23 +126,20 @@
                 <button class="step-btn" onclick="step('spo2_s', 1)">+</button>
             </div>
         </div>
-
         <div class="label" style="margin-top:15px; font-size:0.6rem;">Live Signal Quality</div>
         <div class="quality-group">
             <button id="q_norm" class="q-btn active" onclick="setQuality('normal')">NORMAL</button>
             <button id="q_poor" class="q-btn" onclick="setQuality('poor')">POOR</button>
         </div>
-
-        <button class="btn-action" style="background: var(--hr-pulse);" onclick="sendVitals()">SYNC VITALS</button>
+        <button class="btn-action" id="btn_sync_vitals" style="background: var(--hr-pulse);" onclick="triggerSync(this, sendVitals)">SYNC VITALS</button>
     </div>
 
     <div class="card" style="border-left: 6px solid var(--bp);">
         <div class="card-top">
-            <div class="label">BP Cuff Attached</div>
             <label class="switch"><input type="checkbox" id="bp_conn" onchange="sendBP()"><span class="slider"></span></label>
+            <div class="label">BP Cuff Attached</div>
         </div>
         <div class="display-val" id="bp_l">120/80</div>
-        
         <div class="slider-wrapper">
             <div class="slider-hint">SYSTOLIC</div>
             <div class="controls">
@@ -152,7 +148,6 @@
                 <button class="step-btn" onclick="step('sys_s', 5)">+</button>
             </div>
         </div>
-
         <div class="slider-wrapper">
             <div class="slider-hint">DIASTOLIC</div>
             <div class="controls">
@@ -161,16 +156,15 @@
                 <button class="step-btn" onclick="step('dia_s', 5)">+</button>
             </div>
         </div>
-
-        <button class="btn-action" style="background: var(--bp);" onclick="sendBP()">SET BP TARGET</button>
+        <button class="btn-action" id="btn_sync_bp" style="background: var(--bp);" onclick="triggerSync(this, sendBP)">SET BP TARGET</button>
     </div>
 
     <div class="card" style="border-left: 6px solid var(--temp);">
         <div class="card-top">
+            <label class="switch"><input type="checkbox" id="t_conn_dummy" checked><span class="slider"></span></label>
             <div class="label">Temp Probe Connected</div>
-            <div class="display-val"><span id="temp_l">36.8</span>°</div>
         </div>
-        
+        <div class="display-val"><span id="temp_l">36.8</span>°</div>
         <div class="slider-wrapper">
             <div class="slider-hint">CORE TEMP</div>
             <div class="controls">
@@ -179,7 +173,7 @@
                 <button class="step-btn" onclick="step('temp_s', 0.1)">+</button>
             </div>
         </div>
-        <button class="btn-action" style="background: var(--temp);" onclick="pushTemp()">PUSH TEMP</button>
+        <button class="btn-action" id="btn_sync_temp" style="background: var(--temp);" onclick="triggerSync(this, pushTemp)">PUSH TEMP</button>
     </div>
 
     <div class="preset-grid">
@@ -190,7 +184,6 @@
 
 <script>
     var socket = io({ transports: ['websocket'], upgrade: false });
-
     let syncTimer = null;
     let currentQuality = 'normal';
     const urlParams = new URLSearchParams(window.location.search);
@@ -202,9 +195,8 @@
         if(roomCode) {
             document.getElementById('room_id_display').innerText = roomCode;
             const monitorUrl = window.location.origin + '/monitor?room=' + roomCode;
-            const qrImg = document.getElementById('qr_img');
-            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(monitorUrl)}`;
-            qrImg.style.display = 'inline-block';
+            document.getElementById('qr_img').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(monitorUrl)}`;
+            document.getElementById('qr_img').style.display = 'inline-block';
         }
         socket.emit('join', { room: roomCode, type: 'controller' });
     });
@@ -214,16 +206,16 @@
         document.getElementById('status_text').innerText = "OFFLINE";
     });
 
-    function copyMonitorLink() {
-        const monitorUrl = window.location.origin + '/monitor?room=' + roomCode;
-        navigator.clipboard.writeText(monitorUrl).then(() => alert("Monitor Link Copied!"));
-    }
-
-    function setQuality(q) {
-        currentQuality = q;
-        document.getElementById('q_norm').className = (q === 'normal') ? 'q-btn active' : 'q-btn';
-        document.getElementById('q_poor').className = (q === 'poor') ? 'q-btn active' : 'q-btn';
-        if(document.getElementById('live_sync').checked) sendVitals();
+    // UX IMPROVEMENT: Sent! Feedback
+    function triggerSync(btn, func) {
+        const originalText = btn.innerText;
+        btn.innerText = "SENT ✓";
+        btn.classList.add('btn-success');
+        func();
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.classList.remove('btn-success');
+        }, 1000);
     }
 
     function step(id, amount) {
@@ -240,7 +232,6 @@
         document.getElementById('spo2_l').innerText = document.getElementById('spo2_s').value;
         document.getElementById('temp_l').innerText = parseFloat(document.getElementById('temp_s').value).toFixed(1);
         document.getElementById('bp_l').innerText = document.getElementById('sys_s').value + "/" + document.getElementById('dia_s').value;
-        
         if(document.getElementById('live_sync').checked) {
             clearTimeout(syncTimer);
             syncTimer = setTimeout(sendVitals, 50);
@@ -249,59 +240,39 @@
 
     function sendVitals() {
         socket.emit('update_vitals', {
-            room: roomCode,
-            type: 'vitals', 
-            hr: document.getElementById('hr_s').value, 
-            hr_conn: document.getElementById('p_conn').checked,
-            spo2: document.getElementById('spo2_s').value, 
-            spo2_conn: document.getElementById('p_conn').checked,
+            room: roomCode, type: 'vitals', 
+            hr: document.getElementById('hr_s').value, hr_conn: document.getElementById('p_conn').checked,
+            spo2: document.getElementById('spo2_s').value, spo2_conn: document.getElementById('p_conn').checked,
             signal_quality: currentQuality
         });
     }
 
     function sendBP() {
         socket.emit('update_vitals', {
-            room: roomCode,
-            type: 'set_target_bp', 
-            sys: document.getElementById('sys_s').value,
-            dia: document.getElementById('dia_s').value, 
+            room: roomCode, type: 'set_target_bp', 
+            sys: document.getElementById('sys_s').value, dia: document.getElementById('dia_s').value, 
             bp_conn: document.getElementById('bp_conn').checked
         });
     }
 
     function pushTemp() {
-        socket.emit('update_vitals', { 
-            room: roomCode, 
-            type: 'push_temp', 
-            temp: document.getElementById('temp_s').value 
-        });
+        socket.emit('update_vitals', { room: roomCode, type: 'push_temp', temp: document.getElementById('temp_s').value });
     }
 
     function applyPreset(type) {
         if(type === 'normal') {
             document.getElementById('hr_s').value = 75; document.getElementById('spo2_s').value = 98;
             document.getElementById('sys_s').value = 120; document.getElementById('dia_s').value = 80;
-            setQuality('normal');
         } else {
             document.getElementById('hr_s').value = 0; document.getElementById('spo2_s').value = 70;
             document.getElementById('sys_s').value = 0; document.getElementById('dia_s').value = 0;
-            setQuality('poor');
         }
         updateLabels();
     }
 
-    function masterReset() {
-        if(confirm("RESET ENTIRE SIMULATION?")) {
-            socket.emit('update_vitals', { room: roomCode, type: 'system_reset' });
-            location.reload();
-        }
-    }
-
-    function remoteShutdown() {
-        if(confirm("SHUT DOWN MONITOR?")) {
-            socket.emit('system_shutdown', { room: roomCode });
-        }
-    }
+    function masterReset() { if(confirm("RESET ENTIRE SIMULATION?")) { socket.emit('update_vitals', { room: roomCode, type: 'system_reset' }); location.reload(); } }
+    function remoteShutdown() { if(confirm("SHUT DOWN MONITOR?")) socket.emit('system_shutdown', { room: roomCode }); }
+    function copyMonitorLink() { navigator.clipboard.writeText(window.location.origin + '/monitor?room=' + roomCode).then(() => alert("Monitor Link Copied!")); }
 </script>
 </body>
 </html>
