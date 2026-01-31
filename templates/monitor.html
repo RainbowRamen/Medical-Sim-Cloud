@@ -12,7 +12,7 @@
         .status-bar { height: 50px; background: #a7a9ac; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; font-size: 0.85rem; font-weight: bold; color: #333; border-bottom: 2px solid #808285; flex-shrink: 0; }
         .status-right { display: flex; align-items: center; gap: 12px; }
         
-        /* Added Clock Style */
+        /* ADDED: Clock Style */
         #clock_display { font-family: monospace; font-size: 1.1rem; background: rgba(0,0,0,0.05); padding: 2px 8px; border-radius: 4px; margin-right: 10px; }
 
         .battery-icon { width: 28px; height: 14px; border: 2px solid #333; border-radius: 3px; position: relative; padding: 1px; }
@@ -36,10 +36,12 @@
         .row-label { font-size: 1.1rem; font-weight: 900; color: #444; text-transform: uppercase; }
         .row-unit { font-size: 0.75rem; color: #888; font-weight: 700; }
         
-        /* Clinical Alarm Limits Styling */
+        /* ADDED: Alarm Limit Labels */
         .alarm-limits { position: absolute; top: 10px; right: 18px; text-align: right; color: #a7a9ac; font-size: 0.7rem; font-weight: 800; line-height: 1.1; }
 
         .row-value { font-size: clamp(2rem, 10vh, 7rem); font-weight: 900; color: #cccccc; transition: color 0.3s; line-height: 1; text-align: center; }
+        
+        /* ADDED: Alert Message Style */
         .msg-overlay { font-size: 1.2rem; font-weight: 900; color: #ff3b30; }
         
         .hr-active { color: #1b8a4d !important; }
@@ -54,10 +56,11 @@
         .blinking { animation: blink 1s linear infinite; }
         @keyframes blink { 50% { opacity: 0.3; } }
         
-        /* Updated Standby Screen with Power Label */
         #standby_screen, #loading_screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
         .power-btn-main { width: 130px; height: 130px; border-radius: 50%; border: 4px solid #1b8a4d; background: none; color: #1b8a4d; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; margin-bottom: 10px; }
         .power-btn-main:active { background: #1b8a4d; color: white; transform: scale(0.9); }
+        
+        /* ADDED: Power Label */
         .power-text { color: #1b8a4d; font-weight: 900; letter-spacing: 4px; font-size: 0.8rem; }
         
         .progress-container { width: 300px; height: 12px; background: #333; border-radius: 6px; margin-top: 25px; overflow: hidden; }
@@ -141,7 +144,7 @@
     const roomCode = urlParams.get('room');
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // 1. Clock Logic
+    // CLOCK LOGIC
     function updateClock() {
         const now = new Date();
         document.getElementById('clock_display').innerText = now.getHours().toString().padStart(2,'0') + ":" + now.getMinutes().toString().padStart(2,'0');
@@ -149,9 +152,8 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // 2. Fullscreen Logic
+    // STARTUP / FULLSCREEN LOGIC
     function startBoot() {
-        // Trigger Fullscreen
         if (!document.fullscreenElement) {
             document.documentElement.requestFullscreen().catch(err => {
                 console.log("Fullscreen blocked or not supported");
@@ -205,7 +207,6 @@
             spo2El.className = "row-value msg-overlay";
         }
 
-        // Handle BP state visibility
         if (!bp_attached && !cycling) {
             sysEl.innerText = "ATTACH CUFF";
             sysEl.className = "row-value msg-overlay";
@@ -258,7 +259,7 @@
         }, 10000);
     }
 
-    socket.on('update_vitals', (data) => {
+    socket.on('update_monitor', (data) => {
         if (data.type === 'vitals') {
             targetHR = data.hr; targetSpO2 = data.spo2;
             hr_on = data.hr_conn; spo2_on = data.spo2_conn;
