@@ -14,34 +14,40 @@
         .dot { width: 10px; height: 10px; border-radius: 50%; background: #ff3b30; }
         .dot.online { background: #34c759; box-shadow: 0 0 5px #34c759; }
 
-        .scroll-area { padding: 16px; overflow-y: auto; flex-grow: 1; padding-bottom: 30px; }
+        .scroll-area { padding: 12px; overflow-y: auto; flex-grow: 1; padding-bottom: 30px; }
         .card { background: #fff; border-radius: 20px; padding: 16px; margin-bottom: 12px; border: 1px solid #e5e5ea; }
         
         /* Room Display Styling */
-        .room-card { text-align: center; border-bottom: 4px solid var(--accent); }
+        .room-card { text-align: center; border-bottom: 4px solid var(--accent); padding: 10px; }
         .room-id { font-size: 1.8rem; font-weight: 900; letter-spacing: 4px; color: var(--accent); margin: 5px 0; }
-        #qr_img { width: 140px; height: 140px; margin-top: 10px; border-radius: 12px; border: 1px solid #eee; }
+        #qr_img { width: 120px; height: 120px; margin-top: 5px; border-radius: 12px; border: 1px solid #eee; }
 
         .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #8e8e93; }
+        .label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #8e8e93; }
         .display-val { font-size: 2.2rem; font-weight: 800; color: #1c1c1e; }
         
-        .sync-row { display: flex; justify-content: space-between; align-items: center; background: #f2f2f7; padding: 8px 12px; border-radius: 12px; margin-bottom: 15px; }
+        .sync-row { display: flex; justify-content: space-between; align-items: center; background: #f2f2f7; padding: 6px 12px; border-radius: 12px; margin-bottom: 12px; }
 
-        .controls { display: flex; align-items: center; gap: 12px; margin-top: 5px; }
-        .slider-wrapper { margin-top: 10px; }
-        .slider-hint { font-size: 0.6rem; font-weight: 800; color: #8e8e93; margin-left: 56px; margin-bottom: -5px; }
+        .controls { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+        .slider-wrapper { margin-top: 8px; }
+        .slider-hint { font-size: 0.6rem; font-weight: 800; color: #8e8e93; margin-left: 54px; margin-bottom: -4px; }
         
-        input[type=range] { flex-grow: 1; -webkit-appearance: none; appearance: none; height: 6px; background: #e5e5ea; border-radius: 3px; outline: none; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #fff; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.15); border: 0.5px solid #d1d1d6; }
+        /* UX IMPROVEMENT: Deeper colors for selected sliders */
+        input[type=range] { flex-grow: 1; -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; outline: none; transition: background 0.2s; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #fff; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.2); border: 0.5px solid #d1d1d6; }
         
-        #hr_s { background: #c5e1d1; }
-        #spo2_s { background: #cce5ef; }
-        #sys_s, #dia_s { background: #d8d8d9; }
-        #temp_s { background: #e8daef; }
+        /* High-Contrast Slider Tracks */
+        #hr_s { background: #146639; }   /* Deeper Green */
+        #spo2_s { background: #005d82; } /* Deeper Blue */
+        #sys_s, #dia_s { background: #2c2c2e; } /* Deeper Grey */
+        #temp_s { background: #6b3482; } /* Deeper Purple */
 
-        .step-btn { width: 44px; height: 44px; border-radius: 12px; border: none; background: #f2f2f7; font-size: 1.5rem; }
-        .switch { position: relative; display: inline-block; width: 51px; height: 31px; }
+        /* UX IMPROVEMENT: Feedback for Step Buttons */
+        .step-btn { width: 44px; height: 44px; border-radius: 12px; border: none; background: #e5e5ea; font-size: 1.5rem; transition: transform 0.1s; }
+        .step-btn:active { transform: scale(0.9); background: #d1d1d6; }
+
+        .switch { position: relative; display: inline-block; width: 51px; height: 31px; transition: transform 0.1s; }
+        .switch:active { transform: scale(0.92); } /* Pill Toggle Feedback */
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #e5e5ea; transition: .3s; border-radius: 34px; }
         .slider:before { position: absolute; content: ""; height: 27px; width: 27px; left: 2px; bottom: 2px; background: #fff; transition: .3s; border-radius: 50%; }
@@ -49,14 +55,19 @@
         input:checked + .slider:before { transform: translateX(20px); }
 
         .quality-group { display: flex; gap: 5px; margin-top: 10px; }
-        .q-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd; background: #f9f9f9; font-size: 0.7rem; font-weight: bold; cursor: pointer; }
+        .q-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd; background: #f9f9f9; font-size: 0.7rem; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
+        .q-btn:active { transform: scale(0.95); }
         .q-btn.active { background: var(--spo2); color: white; border-color: var(--spo2); }
 
-        .btn-action { width: 100%; border: none; padding: 15px; border-radius: 12px; font-weight: bold; margin-top: 12px; font-size: 0.9rem; cursor: pointer; color: white;}
-        .util-btn { border: none; border-radius: 8px; padding: 6px 12px; font-size: 0.7rem; font-weight: 700; cursor: pointer; background: #e5e5ea; }
+        .btn-action { width: 100%; border: none; padding: 15px; border-radius: 12px; font-weight: bold; margin-top: 12px; font-size: 0.9rem; cursor: pointer; color: white; transition: transform 0.1s, filter 0.1s; }
+        .btn-action:active { transform: scale(0.97); filter: brightness(0.9); }
+
+        .util-btn { border: none; border-radius: 8px; padding: 6px 12px; font-size: 0.7rem; font-weight: 700; cursor: pointer; background: #e5e5ea; transition: transform 0.1s; }
+        .util-btn:active { transform: scale(0.94); }
         
         .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .btn-preset { padding: 12px; border: 2px solid #ddd; border-radius: 12px; font-weight: bold; background: #fff; cursor: pointer; font-size: 1rem; }
+        .btn-preset { padding: 12px; border: 2px solid #ddd; border-radius: 12px; font-weight: bold; background: #fff; cursor: pointer; font-size: 1rem; transition: transform 0.1s; }
+        .btn-preset:active { transform: scale(0.95); }
         .p-normal { border-color: #34c759; color: #34c759; }
         .p-arrest { border-color: #ff3b30; color: #ff3b30; }
     </style>
@@ -87,7 +98,7 @@
 
     <div class="card" style="border-left: 6px solid var(--hr-pulse);">
         <div class="card-top">
-            <div class="label">Pulse Oximetry</div>
+            <div class="label">SpO2 Probe Connected</div>
             <label class="switch"><input type="checkbox" id="p_conn" onchange="sendVitals()"><span class="slider"></span></label>
         </div>
         <div class="sync-row">
@@ -128,7 +139,7 @@
 
     <div class="card" style="border-left: 6px solid var(--bp);">
         <div class="card-top">
-            <div class="label">BP Cuff</div>
+            <div class="label">BP Cuff Attached</div>
             <label class="switch"><input type="checkbox" id="bp_conn" onchange="sendBP()"><span class="slider"></span></label>
         </div>
         <div class="display-val" id="bp_l">120/80</div>
@@ -155,7 +166,10 @@
     </div>
 
     <div class="card" style="border-left: 6px solid var(--temp);">
-        <div class="card-top"><div class="label">Temperature</div><div class="display-val"><span id="temp_l">36.8</span>°</div></div>
+        <div class="card-top">
+            <div class="label">Temp Probe Connected</div>
+            <div class="display-val"><span id="temp_l">36.8</span>°</div>
+        </div>
         
         <div class="slider-wrapper">
             <div class="slider-hint">CORE TEMP</div>
@@ -175,22 +189,16 @@
 </div>
 
 <script>
-    var socket = io({
-        transports: ['websocket'],
-        upgrade: false
-    });
+    var socket = io({ transports: ['websocket'], upgrade: false });
 
     let syncTimer = null;
     let currentQuality = 'normal';
-
     const urlParams = new URLSearchParams(window.location.search);
     const roomCode = urlParams.get('room');
 
     socket.on('connect', () => {
         document.getElementById('status_dot').className = "dot online";
         document.getElementById('status_text').innerText = "ONLINE";
-        
-        // Update Room UI
         if(roomCode) {
             document.getElementById('room_id_display').innerText = roomCode;
             const monitorUrl = window.location.origin + '/monitor?room=' + roomCode;
@@ -198,7 +206,6 @@
             qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(monitorUrl)}`;
             qrImg.style.display = 'inline-block';
         }
-
         socket.emit('join', { room: roomCode, type: 'controller' });
     });
 
@@ -209,8 +216,7 @@
 
     function copyMonitorLink() {
         const monitorUrl = window.location.origin + '/monitor?room=' + roomCode;
-        navigator.clipboard.writeText(monitorUrl);
-        alert("Monitor Link Copied!");
+        navigator.clipboard.writeText(monitorUrl).then(() => alert("Monitor Link Copied!"));
     }
 
     function setQuality(q) {
