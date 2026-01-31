@@ -174,15 +174,28 @@
 </div>
 
 <script>
-    var socket = io();
+    // FIX 1: Force WebSocket transport for stable connection on Render/Mobile
+    var socket = io({
+        transports: ['websocket'],
+        upgrade: false
+    });
+
     let targetHR = 60, targetSpO2 = 98, t_sys = 120, t_dia = 80;
     let hr_on = false, spo2_on = false, cycling = false, signalQuality = 'normal';
     let hrDrift = 0, spo2Drift = 0;
-    
     let masterVolume = 0.5; 
     let isMuted = false;
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomCode = urlParams.get('room');
+
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // FIX 2: Join the room IMMEDIATELY on connection
+    socket.on('connect', () => {
+        console.log("Connected to server. Joining room:", roomCode);
+        socket.emit('join', { room: roomCode, type: 'monitor' });
+    });
 
     function adjustVol(amt) {
         masterVolume = Math.min(1.0, Math.max(0, masterVolume + amt));
@@ -201,39 +214,43 @@
     }
 
     function startBoot() {
-        audioCtx.resume();
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
         document.getElementById('standby_screen').style.display = 'none';
         document.getElementById('loading_screen').style.display = 'flex';
         
-        // SYNC FIX: Get room from URL and tell server monitor is ready
-        const urlParams = new URLSearchParams(window.location.search);
-        const room = urlParams.get('room');
-        socket.emit('monitor_powered_on', { room: room });
+        // Let the controller know the monitor is "Powering Up"
+        socket.emit('monitor_powered_on', { room: roomCode });
 
         setTimeout(() => { document.getElementById('p_bar').style.width = '100%'; }, 100);
         setTimeout(() => {
             document.getElementById('loading_screen').style.display = 'none';
             runAnimationLoop(); 
             startDriftTimer();
-        }, 10000);
+        }, 5000); // Reduced to 5s for faster testing
     }
 
     function updateDisplay() {
+        const hrEl = document.getElementById('hr_v');
+        const spo2El = document.getElementById('spo2_v');
+
         if (hr_on) {
             let dHR = Math.max(0, parseInt(targetHR) + hrDrift);
-            document.getElementById('hr_v').innerText = (targetHR > 0) ? dHR : 0;
-            document.getElementById('hr_v').className = "row-value hr-active";
+            hrEl.innerText = (targetHR > 0) ? dHR : 0;
+            hrEl.className = "row-value hr-active";
         } else {
-            document.getElementById('hr_v').innerText = "---";
-            document.getElementById('hr_v').className = "row-value";
+            hrEl.innerText = "---";
+            hrEl.className = "row-value";
         }
+
         if (spo2_on) {
             let dSPO2 = Math.min(100, Math.max(0, parseInt(targetSpO2) + spo2Drift));
-            document.getElementById('spo2_v').innerText = (targetHR > 0) ? dSPO2 : 0;
-            document.getElementById('spo2_v').className = "row-value spo2-active";
+            spo2El.innerText = (targetHR > 0) ? dSPO2 : 0;
+            spo2El.className = "row-value spo2-active";
         } else {
-            document.getElementById('spo2_v').innerText = "---";
-            document.getElementById('spo2_v').className = "row-value";
+            spo2El.innerText = "---";
+            spo2El.className = "row-value";
         }
     }
 
@@ -276,7 +293,9 @@
         }, 10000);
     }
 
+    // FIX 3: Listen for updates specifically for this room
     socket.on('update_monitor', (data) => {
+        console.log("Received Data:", data);
         if (data.type === 'vitals') {
             targetHR = data.hr; 
             targetSpO2 = data.spo2;
@@ -319,19 +338,11 @@
         }, 13000);
     }
 
-    let pBtn = document.getElementById('mon_power_btn'), pTimer;
-    pBtn.addEventListener('mousedown', () => { pTimer = setTimeout(() => { if(confirm("Shutdown?")) socket.emit('system_shutdown'); }, 3000); });
-    pBtn.addEventListener('mouseup', () => clearTimeout(pTimer));
-
     function toggleFullScreen() {
         if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.log(`Error: ${err.message}`);
-            });
+            document.documentElement.requestFullscreen();
         } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            }
+            document.exitFullscreen();
         }
     }
 </script>
