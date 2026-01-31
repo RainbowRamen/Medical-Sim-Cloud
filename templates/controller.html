@@ -159,22 +159,22 @@
         <button class="btn-action" id="btn_sync_bp" style="background: var(--bp);" onclick="triggerSync(this, sendBP)">SET BP TARGET</button>
     </div>
 
-    <div class="card" style="border-left: 6px solid var(--temp);">
-        <div class="card-top">
-            <label class="switch"><input type="checkbox" id="t_conn_dummy" checked><span class="slider"></span></label>
-            <div class="label">Temp Probe Connected</div>
-        </div>
+<div class="card" style="border-left: 6px solid var(--temp);">
+    <div class="card-top">
+        <div class="label">Temperature Control</div>
         <div class="display-val"><span id="temp_l">36.8</span>°</div>
-        <div class="slider-wrapper">
-            <div class="slider-hint">CORE TEMP</div>
-            <div class="controls">
-                <button class="step-btn" onclick="step('temp_s', -0.1)">−</button>
-                <input type="range" id="temp_s" min="34.0" max="42.0" step="0.1" value="36.8" oninput="updateLabels()">
-                <button class="step-btn" onclick="step('temp_s', 0.1)">+</button>
-            </div>
-        </div>
-        <button class="btn-action" id="btn_sync_temp" style="background: var(--temp);" onclick="triggerSync(this, pushTemp)">PUSH TEMP</button>
     </div>
+    
+    <div class="slider-wrapper">
+        <div class="slider-hint">CORE TEMP (°C)</div>
+        <div class="controls">
+            <button class="step-btn" onclick="step('temp_s', -0.1)">−</button>
+            <input type="range" id="temp_s" min="34.0" max="42.0" step="0.1" value="36.8" oninput="updateLabels()">
+            <button class="step-btn" onclick="step('temp_s', 0.1)">+</button>
+        </div>
+    </div>
+    <button class="btn-action" id="btn_sync_temp" style="background: var(--temp);" onclick="triggerSync(this, pushTemp)">PUSH TEMP TO MONITOR</button>
+</div>
 
     <div class="preset-grid">
         <button class="btn-preset p-normal" onclick="applyPreset('normal')">🟢 NORMAL</button>
