@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SimMonitor Pro - Clinical Simulation</title>
+    <style>
+        :root {
+            --bg: #000;
+            --card: #1c1c1e;
+            --accent: #0a84ff;
+            --green: #30d158;
+            --yellow: #ffd60a;
+            --red: #ff453a;
+            --grey: #8e8e93;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg); color: white;
+            min-height: 100vh; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 20px; user-select: none;
+        }
+        .container { width: 100%; max-width: 420px; text-align: center; }
+        .logo { font-size: 3rem; margin-bottom: 10px; }
+        h1 { font-weight: 800; font-size: 1.8rem; margin-bottom: 8px; letter-spacing: -0.5px; }
+        .tagline { color: var(--grey); font-size: 0.9rem; margin-bottom: 40px; }
+        .choice-card {
+            background: var(--card); padding: 24px; border-radius: 20px;
+            margin-bottom: 16px; border: 2px solid #333; cursor: pointer;
+            transition: all 0.2s ease; text-align: left; position: relative; overflow: hidden;
+        }
+        .choice-card:hover { transform: translateY(-2px); }
+        .choice-card:active { transform: scale(0.98); }
+        .choice-card.basic { border-color: var(--green); }
+        .choice-card.basic:hover { box-shadow: 0 8px 30px rgba(48, 209, 88, 0.2); }
+        .choice-card.advanced { border-color: var(--accent); }
+        .choice-card.advanced:hover { box-shadow: 0 8px 30px rgba(10, 132, 255, 0.2); }
+        .card-title {
+            font-size: 1.3rem; font-weight: 700; margin-bottom: 8px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .card-title .badge {
+            font-size: 0.6rem; padding: 3px 8px; border-radius: 10px;
+            font-weight: 600; text-transform: uppercase;
+        }
+        .badge.green { background: rgba(48, 209, 88, 0.2); color: var(--green); }
+        .badge.blue { background: rgba(10, 132, 255, 0.2); color: var(--accent); }
+        .card-desc { color: var(--grey); font-size: 0.85rem; line-height: 1.5; margin-bottom: 16px; }
+        .card-features { display: flex; flex-wrap: wrap; gap: 8px; }
+        .feature-tag {
+            background: #2c2c2e; padding: 6px 12px; border-radius: 8px;
+            font-size: 0.7rem; color: #ccc;
+        }
+        .arrow {
+            position: absolute; right: 20px; top: 50%;
+            transform: translateY(-50%); font-size: 1.5rem; color: var(--grey); opacity: 0.5;
+        }
+        .divider {
+            display: flex; align-items: center; margin: 24px 0;
+            color: var(--grey); font-size: 0.75rem;
+        }
+        .divider::before, .divider::after {
+            content: ''; flex: 1; height: 1px; background: #333;
+        }
+        .divider span { padding: 0 15px; }
+        .join-section {
+            background: var(--card); border-radius: 16px;
+            padding: 20px; border: 1px solid #333;
+        }
+        .join-section h3 { font-size: 0.9rem; margin-bottom: 12px; color: var(--grey); }
+        .join-input-row { display: flex; gap: 10px; }
+        .join-input {
+            flex: 1; background: #2c2c2e; border: 1px solid #444;
+            border-radius: 12px; padding: 14px 16px; color: white;
+            font-size: 1.1rem; font-family: monospace;
+            text-transform: uppercase; letter-spacing: 4px; text-align: center;
+        }
+        .join-input:focus { outline: none; border-color: var(--accent); }
+        .join-input::placeholder { color: #555; letter-spacing: 2px; }
+        .join-btn {
+            background: var(--accent); border: none; border-radius: 12px;
+            padding: 14px 24px; color: white; font-weight: 700;
+            font-size: 0.9rem; cursor: pointer; transition: all 0.2s;
+        }
+        .join-btn:hover { filter: brightness(1.1); }
+        .join-btn:active { transform: scale(0.95); }
+        .join-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .join-status {
+            font-size: 0.75rem; margin-top: 8px; min-height: 18px;
+            transition: all 0.3s;
+        }
+        .join-status.error { color: var(--red); }
+        .join-status.success { color: var(--green); }
+        .footer { margin-top: 40px; color: #444; font-size: 0.75rem; letter-spacing: 1px; }
+        @media (max-width: 400px) {
+            .card-features { display: none; }
+            .choice-card { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🏥</div>
+        <h1>SimMonitor Pro</h1>
+        <p class="tagline">Clinical Simulation Made Simple</p>
+
+        <div class="choice-card basic" onclick="start('basic')">
+            <div class="card-title">
+                📊 Spot Check Mode
+                <span class="badge green">Simple</span>
+            </div>
+            <p class="card-desc">
+                Numeric vital signs display without waveforms. Perfect for ward simulations and basic vital sign practice.
+            </p>
+            <div class="card-features">
+                <span class="feature-tag">HR</span>
+                <span class="feature-tag">SpO2</span>
+                <span class="feature-tag">BP</span>
+                <span class="feature-tag">Temp</span>
+                <span class="feature-tag">RR</span>
+            </div>
+            <span class="arrow">›</span>
+        </div>
+
+        <div class="choice-card advanced" onclick="start('advanced')">
+            <div class="card-title">
+                📈 Advanced Mode
+                <span class="badge blue">Full Featured</span>
+            </div>
+            <p class="card-desc">
+                Continuous ECG, SpO2 pleth, and respiratory waveforms with rhythm control, alarms, and clinical scenarios.
+            </p>
+            <div class="card-features">
+                <span class="feature-tag">ECG Rhythms</span>
+                <span class="feature-tag">Waveforms</span>
+                <span class="feature-tag">ABP</span>
+                <span class="feature-tag">EtCO2</span>
+                <span class="feature-tag">Alarms</span>
+            </div>
+            <span class="arrow">›</span>
+        </div>
+
+        <div class="divider"><span>OR JOIN EXISTING SESSION</span></div>
+
+        <div class="join-section">
+            <h3>Enter Room Code</h3>
+            <div class="join-input-row">
+                <input type="text" class="join-input" id="room_code" placeholder="XXXX" maxlength="4" oninput="this.value = this.value.toUpperCase()">
+                <button class="join-btn" id="join_btn" onclick="joinRoom()">JOIN</button>
+            </div>
+            <div class="join-status" id="join_status"></div>
+        </div>
+
+        <div class="footer">CLINICAL SIMULATION SYSTEM</div>
+    </div>
+
+    <script>
+        function start(mode) {
+            var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            var room = '';
+            for (var i = 0; i < 4; i++) {
+                room += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            window.location.href = '/control?room=' + room + '&mode=' + mode;
+        }
+
+        function joinRoom() {
+            var code = document.getElementById('room_code').value.trim().toUpperCase();
+            var status = document.getElementById('join_status');
+            var btn = document.getElementById('join_btn');
+
+            if (code.length !== 4) {
+                status.className = 'join-status error';
+                status.innerText = 'Please enter a 4-character room code';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = '...';
+            status.className = 'join-status';
+            status.innerText = 'Looking up room...';
+
+            // Auto-detect room mode from server
+            fetch('/api/room/' + code)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.exists) {
+                        status.className = 'join-status success';
+                        status.innerText = 'Found! Mode: ' + data.mode.toUpperCase();
+                        setTimeout(function() {
+                            window.location.href = '/monitor?room=' + code + '&mode=' + data.mode;
+                        }, 500);
+                    } else {
+                        status.className = 'join-status error';
+                        status.innerText = 'Room not found. Check the code and try again.';
+                        btn.disabled = false;
+                        btn.innerText = 'JOIN';
+                    }
+                })
+                .catch(function() {
+                    // If API fails, default to advanced mode
+                    window.location.href = '/monitor?room=' + code + '&mode=advanced';
+                });
+        }
+
+        document.getElementById('room_code').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') joinRoom();
+        });
+    </script>
+</body>
+</html>
