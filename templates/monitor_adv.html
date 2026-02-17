@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Clinical Monitor - Advanced Mode</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root { --bg-color: #000; --ecg-color: #30d158; --spo2-color: #64d2ff; --spo2-color-alt: #ffd60a; --resp-color: #8e8e93; --abp-color: #ff453a; --etco2-color: #8e8e93; --temp-color: #bf5af2; --header-bg: #1a1a1a; --header-h: 40px; --footer-h: 70px; --btn-bg: linear-gradient(180deg, #333 0%, #1a1a1a 100%); --alarm-red: #ff3b30; --alarm-yellow: #ffd60a; }
+        body, html { background: var(--bg-color); color: white; font-family: 'Segoe UI', 'Roboto', sans-serif; height: 100vh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; user-select: none; }
+        .monitor-header { height: var(--header-h); background: var(--header-bg); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; font-size: 14px; font-weight: 700; border-bottom: 1px solid #333; flex-shrink: 0; }
+        .alarm-indicator { width: 100px; height: 30px; border-radius: 4px; background: #1a1a1a; border: 2px solid #333; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; transition: all 0.3s; }
+        .alarm-paused-indicator { display: none; background: var(--alarm-yellow); color: black; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 800; align-items: center; gap: 6px; }
+        .alarm-paused-indicator.active { display: flex; }
+        .alarm-indicator.active-alarm { background: var(--alarm-red); color: white; animation: alarm-flash 0.5s infinite; border-color: var(--alarm-red); }
+        @keyframes alarm-flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .monitor-grid { display: flex; height: calc(100vh - var(--header-h) - var(--footer-h)); width: 100vw; overflow: hidden; }
+        .wave-container { flex: 0 0 78%; display: flex; flex-direction: column; height: 100%; border-right: 1px solid #222; }
+        .wave-row { flex: 1 1 0; position: relative; border-bottom: 1px solid #1a1a1a; min-height: 0; background: #000; cursor: pointer; }
+        .wave-label { position: absolute; top: 4px; left: 8px; font-size: 14px; font-weight: 800; z-index: 10; }
+        .sweep-speed { position: absolute; top: 4px; right: 8px; font-size: 10px; opacity: 0.4; z-index: 10; }
+        canvas { width: 100%; height: 100%; display: block; }
+        .vitals-container { flex: 1; display: flex; flex-direction: column; height: 100%; padding: 2px; background: #0a0a0a; }
+        .vital-block { flex: 1 1 0; margin: 2px; background: linear-gradient(180deg, #111 0%, #050505 100%); border-radius: 4px; padding: 4px 8px; display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #222; min-height: 0; overflow: hidden; transition: all 0.3s; }
+        .vital-block.alarm-state { background: linear-gradient(180deg, #4a0000 0%, #050505 100%); animation: vital-alarm 1s infinite; }
+        @keyframes vital-alarm { 0%, 100% { border-left-color: var(--alarm-red); } 50% { border-left-color: #222; } }
+        .vital-block.alarm-medium { background: linear-gradient(180deg, #3a3000 0%, #050505 100%); animation: vital-alarm-amber 1.5s infinite; }
+        @keyframes vital-alarm-amber { 0%, 100% { border-left-color: var(--alarm-yellow); } 50% { border-left-color: #222; } }
+        .v-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; }
+        .v-limits { font-size: 10px; opacity: 0.4; line-height: 1; font-weight: 400; text-align: right; }
+        .v-value { font-size: 5.5vh; font-weight: 900; text-align: right; line-height: 0.8; letter-spacing: -1px; margin-top: auto; transition: color 0.3s; }
+        .v-unit { font-size: 11px; text-align: right; opacity: 0.6; padding-bottom: 2px; }
+        .small-text .v-value { font-size: 3.5vh; }
+        .hr-block { color: var(--ecg-color); border-left-color: var(--ecg-color); }
+        .spo2-block { color: var(--spo2-color); border-left-color: var(--spo2-color); }
+        .spo2-block.alt-color { color: var(--spo2-color-alt); border-left-color: var(--spo2-color-alt); }
+        .bp-block { color: var(--resp-color); border-left-color: var(--resp-color); }
+        .abp-block { color: var(--abp-color); border-left-color: var(--abp-color); }
+        .resp-block { color: var(--resp-color); border-left-color: var(--resp-color); }
+        .etco2-block { color: var(--etco2-color); border-left-color: var(--etco2-color); }
+        .temp-block { color: var(--temp-color); border-left-color: var(--temp-color); }
+        .interaction-dock { height: var(--footer-h); background: #0a0a0a; display: flex; padding: 6px; gap: 4px; border-top: 2px solid #222; flex-shrink: 0; }
+        .soft-btn { flex: 1; background: var(--btn-bg); border: 1px solid #333; border-radius: 4px; color: #ccc; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; transition: all 0.1s; position: relative; }
+        .soft-btn:active { background: linear-gradient(180deg, #555 0%, #333 100%); transform: translateY(1px); }
+        .soft-btn.active { border-color: #ffd60a; color: #ffd60a; }
+        .soft-btn i { font-style: normal; font-size: 18px; margin-bottom: 3px; }
+        .btn-label { font-size: 10px; font-weight: 600; text-transform: uppercase; }
+        .btn-yellow { color: #ffd60a; }
+        .btn-red { color: #ff3b30; }
+        .btn-green { color: #30d158; }
+        .hidden { display: none !important; }
+        .dimmed { opacity: 0.15; filter: grayscale(1); }
+        .volume-bar { position: absolute; top: -3px; left: 50%; transform: translateX(-50%); width: 80%; height: 3px; background: #222; border-radius: 2px; overflow: hidden; }
+        .volume-fill { height: 100%; background: var(--ecg-color); width: 50%; transition: width 0.2s; }
+        .nibp-cycling { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 69, 58, 0.9); padding: 20px 40px; border-radius: 8px; font-size: 18px; font-weight: 800; z-index: 100; animation: pulse-indicator 0.8s infinite; }
+        @keyframes pulse-indicator { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.05); } }
+        .color-indicator { position: absolute; bottom: 4px; left: 8px; font-size: 9px; opacity: 0.5; z-index: 10; transition: opacity 0.5s; }
+        .power-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.5s ease; }
+        .power-overlay.hidden { opacity: 0; pointer-events: none; }
+        .power-btn { width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(145deg, #1a1a1a, #0a0a0a); border: 3px solid #333; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+        .power-btn:hover { border-color: var(--ecg-color); box-shadow: 0 0 40px rgba(48, 209, 88, 0.3); }
+        .power-btn:active { transform: scale(0.95); }
+        .power-btn.active { border-color: var(--ecg-color); box-shadow: 0 0 50px rgba(48, 209, 88, 0.5); }
+        .power-icon { font-size: 48px; color: #444; transition: color 0.3s; }
+        .power-btn.active .power-icon { color: var(--ecg-color); }
+        .power-label { color: #444; font-size: 14px; font-weight: 700; margin-top: 20px; letter-spacing: 2px; transition: color 0.3s; }
+        .power-label.active { color: var(--ecg-color); }
+        .startup-text { color: var(--ecg-color); font-size: 12px; margin-top: 30px; opacity: 0; transition: opacity 0.3s; }
+        .startup-text.visible { opacity: 1; }
+        .startup-progress { width: 200px; height: 3px; background: #222; border-radius: 2px; margin-top: 15px; overflow: hidden; opacity: 0; transition: opacity 0.3s; }
+        .startup-progress.visible { opacity: 1; }
+        .startup-progress-bar { height: 100%; background: var(--ecg-color); width: 0%; transition: width 0.1s linear; }
+        .brand-text { position: absolute; bottom: 40px; color: #333; font-size: 11px; letter-spacing: 3px; }
+        .patient-btn { cursor: pointer; padding: 4px 10px; border-radius: 4px; transition: background 0.2s; }
+        .patient-btn:hover { background: #333; }
+        .patient-btn:active { background: #444; }
+        .patient-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 8000; }
+        .patient-overlay.active { display: flex; }
+        .patient-modal { background: #1c1c1e; border-radius: 16px; padding: 24px; width: 90%; max-width: 350px; border: 1px solid #333; }
+        .patient-modal h3 { margin: 0 0 20px 0; text-align: center; color: #fff; font-size: 18px; }
+        .patient-option { background: #2c2c2e; border: 2px solid #444; border-radius: 12px; padding: 16px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s; }
+        .patient-option:hover { border-color: #666; }
+        .patient-option.selected { border-color: var(--ecg-color); background: rgba(48, 209, 88, 0.1); }
+        .patient-option-title { font-weight: 800; font-size: 16px; margin-bottom: 4px; }
+        .patient-option-desc { font-size: 11px; color: var(--resp-color); line-height: 1.4; }
+        .patient-close-btn { background: var(--ecg-color); color: black; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: 700; font-size: 14px; margin-top: 8px; cursor: pointer; }
+        .patient-close-btn:active { filter: brightness(0.8); }
+        .soft-btn.has-pending { border-color: var(--ecg-color); color: var(--ecg-color); }
+        @keyframes pending-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .soft-btn.has-pending .btn-label { animation: pending-pulse 1s infinite; }
+        .fullscreen-btn { background: #2c2c2e; border: 1px solid #444; border-radius: 4px; color: #888; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .fullscreen-btn:hover { background: #3a3a3c; color: #ccc; }
+        .fullscreen-btn:active { background: #444; }
+        .volume-control-bar { position: absolute; bottom: var(--footer-h); left: 0; right: 0; height: 50px; background: #1a1a1a; border-top: 1px solid #333; display: none; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; z-index: 50; }
+        .volume-control-bar.active { display: flex; }
+        .volume-control-bar .vol-label { font-size: 11px; font-weight: 700; color: #888; margin-right: 10px; min-width: 80px; }
+        .vol-btn { width: 36px; height: 36px; border-radius: 6px; background: #2c2c2e; border: 1px solid #444; color: #ccc; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+        .vol-btn:active { background: #444; transform: scale(0.95); }
+        .vol-btn.selected { background: var(--ecg-color); color: black; border-color: var(--ecg-color); }
+        .vol-btn.selected.alarm-vol { background: var(--alarm-yellow); border-color: var(--alarm-yellow); }
+        .pause-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 500; pointer-events: none; }
+        .pause-overlay.active { display: flex; }
+        .pause-text { font-size: 4rem; font-weight: 900; color: var(--alarm-yellow); animation: pause-blink 1s infinite; }
+        @keyframes pause-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .vital-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 600; }
+        .vital-overlay.active { display: flex; }
+        .vital-modal { background: #1c1c1e; border-radius: 16px; padding: 20px; width: 90%; max-width: 320px; border: 1px solid #444; }
+        .vital-modal h3 { margin: 0 0 15px 0; text-align: center; font-size: 16px; }
+        .vital-modal-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #333; }
+        .vital-modal-row:last-child { border-bottom: none; }
+        .vital-modal-label { font-size: 13px; color: var(--grey); }
+        .vital-modal-value { display: flex; align-items: center; gap: 10px; }
+        .vital-modal-btn { width: 36px; height: 36px; border-radius: 8px; background: #2c2c2e; border: 1px solid #444; color: white; font-size: 18px; font-weight: 600; }
+        .vital-modal-btn:active { background: #444; }
+        .vital-modal-num { font-size: 18px; font-weight: 700; min-width: 50px; text-align: center; }
+        .vital-modal-close { background: #2c2c2e; color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: 700; font-size: 14px; margin-top: 15px; }
+        .vital-modal-close:active { background: #444; }
+        .color-btn { flex: 1; padding: 12px; border-radius: 8px; border: 2px solid #444; font-weight: 700; font-size: 12px; }
+        .color-btn.active { border-width: 3px; }
+        .color-btn.blue { background: rgba(100, 210, 255, 0.2); color: #64d2ff; }
+        .color-btn.blue.active { border-color: #64d2ff; }
+        .color-btn.yellow { background: rgba(255, 214, 10, 0.2); color: #ffd60a; }
+        .color-btn.yellow.active { border-color: #ffd60a; }
+        .cycle-btn { flex: 1; padding: 10px 5px; border-radius: 8px; background: #2c2c2e; border: 1px solid #444; color: #888; font-weight: 600; font-size: 11px; }
+        .cycle-btn.active { background: var(--m-green); border-color: var(--ecg-color); color: var(--ecg-color); }
+        .cycle-btn:active { background: #444; }
+    </style>
+</head>
+<body>
+
+<div class="power-overlay" id="power_overlay">
+    <div class="power-btn" id="power_btn" onclick="startPowerOn()">
+        <span class="power-icon">⏻</span>
+    </div>
+    <div class="power-label" id="power_label">PRESS TO START</div>
+    <div class="startup-text" id="startup_text">INITIALIZING SYSTEM...</div>
+    <div class="startup-progress" id="startup_progress">
+        <div class="startup-progress-bar" id="startup_bar"></div>
+    </div>
+    <div class="brand-text">CLINICAL SIMULATION MONITOR</div>
+</div>
+
+<div class="pause-overlay" id="pause_overlay">
+    <div class="pause-text">⏸ PAUSED</div>
+</div>
+
+<div class="vital-overlay" id="vital_overlay">
+    <div class="vital-modal" id="vital_modal">
+        <h3 id="vital_modal_title">Settings</h3>
+        <div id="vital_modal_content"></div>
+        <button class="vital-modal-close" onclick="closeVitalOverlay()">CLOSE</button>
+    </div>
+</div>
+<div class="patient-overlay" id="patient_overlay">
+    <div class="patient-modal">
+        <h3>SELECT PATIENT TYPE</h3>
+        <div class="patient-option selected" id="opt_adult" onclick="selectPatientType('adult')">
+            <div class="patient-option-title">👤 ADULT</div>
+            <div class="patient-option-desc">HR: 60-120 · SpO2: >92% · RR: 10-20 · Temp: 35-38°C</div>
+        </div>
+        <div class="patient-option" id="opt_child" onclick="selectPatientType('child')">
+            <div class="patient-option-title">🧒 CHILD (1-8 yrs)</div>
+            <div class="patient-option-desc">HR: 70-140 · SpO2: >94% · RR: 18-30 · Temp: 36-38°C</div>
+        </div>
+        <div class="patient-option" id="opt_infant" onclick="selectPatientType('infant')">
+            <div class="patient-option-title">👶 INFANT (&lt;1 yr)</div>
+            <div class="patient-option-desc">HR: 100-180 · SpO2: >94% · RR: 25-50 · Temp: 36.5-37.5°C</div>
+        </div>
+        <button class="patient-close-btn" onclick="closePatientOverlay()">CONFIRM</button>
+    </div>
+</div>
+
+<div class="monitor-header">
+    <div class="patient-btn" id="patient_display" onclick="openPatientOverlay()">PATIENT: ADULT ▼</div>
+    <div class="alarm-indicator" id="alarm_status">NO ALARMS</div>
+    <div class="alarm-paused-indicator" id="alarm_paused_indicator">⏸ PAUSED <span id="alarm_pause_countdown">2:00</span></div>
+    <div id="connection-status" style="color: var(--alarm-red);">● DISCONNECTED</div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <div id="clock">00:00:00</div>
+        <button class="fullscreen-btn" id="fullscreen_btn" onclick="toggleFullscreen()">FULLSCREEN</button>
+    </div>
+</div>
+
+<div class="monitor-grid">
+    <div class="wave-container">
+        <div id="row_ecg" class="wave-row">
+            <div class="wave-label" style="color: var(--ecg-color);">II</div>
+            <div class="sweep-speed">25 mm/s</div>
+            <canvas id="ecgCanvas"></canvas>
+        </div>
+        <div id="row_spo2" class="wave-row">
+            <div class="wave-label" id="pleth_label" style="color: var(--spo2-color);">PLETH</div>
+            <div class="sweep-speed">25 mm/s</div>
+            <div class="color-indicator" id="pleth_color_hint">TAP TO CHANGE COLOR</div>
+            <canvas id="spo2Canvas"></canvas>
+        </div>
+        <div id="row_abp" class="wave-row hidden">
+            <div class="wave-label" style="color: var(--abp-color);">ABP</div>
+            <div class="sweep-speed">25 mm/s</div>
+            <canvas id="abpCanvas"></canvas>
+        </div>
+        <div id="row_etco2" class="wave-row hidden">
+            <div class="wave-label" style="color: var(--etco2-color);">EtCO2</div>
+            <div class="sweep-speed">12.5 mm/s</div>
+            <canvas id="etco2Canvas"></canvas>
+        </div>
+        <div id="row_resp" class="wave-row">
+            <div class="wave-label" style="color: var(--resp-color);">RESP</div>
+            <div class="sweep-speed">6.25 mm/s</div>
+            <canvas id="respCanvas"></canvas>
+        </div>
+    </div>
+
+    <div class="vitals-container">
+        <div id="block_hr" class="vital-block hr-block" onclick="openVitalSettings('hr')">
+            <div class="v-header"><div>HR</div><div class="v-limits" id="hr_limits">120<br>60</div></div>
+            <div class="v-value" id="hr_val">--</div>
+            <div class="v-unit">bpm</div>
+        </div>
+        <div id="block_spo2" class="vital-block spo2-block" onclick="openVitalSettings('spo2')">
+            <div class="v-header"><div>SpO2</div><div class="v-limits" id="spo2_limits">100<br>92</div></div>
+            <div class="v-value" id="spo2_val">--</div>
+            <div class="v-unit">%</div>
+        </div>
+        <div id="block_nibp" class="vital-block bp-block small-text" onclick="openVitalSettings('nibp')">
+            <div class="v-header"><div>NIBP</div><div class="v-limits" id="nibp_limits">140/90<br>90/60</div></div>
+            <div class="v-value" id="bp_val">--/--</div>
+            <div class="v-unit">mmHg</div>
+        </div>
+        <div id="block_abp" class="vital-block abp-block hidden small-text" onclick="openVitalSettings('abp')">
+            <div class="v-header"><div>ABP</div><div class="v-limits" id="abp_limits">160/90<br>80/50</div></div>
+            <div class="v-value" id="abp_val">--/--</div>
+            <div class="v-unit">mmHg <span id="abp_map" style="opacity: 0.6;"></span></div>
+        </div>
+        <div id="block_etco2" class="vital-block etco2-block hidden" onclick="openVitalSettings('etco2')">
+            <div class="v-header"><div>EtCO2</div><div class="v-limits" id="etco2_limits">50<br>0</div></div>
+            <div class="v-value" id="etco2_val">--</div>
+            <div class="v-unit">mmHg</div>
+        </div>
+        <div id="block_resp" class="vital-block resp-block" onclick="openVitalSettings('resp')">
+            <div class="v-header"><div>RR</div><div class="v-limits" id="resp_limits">20<br>10</div></div>
+            <div class="v-value" id="resp_val">--</div>
+            <div class="v-unit">brpm</div>
+        </div>
+        <div id="block_temp" class="vital-block temp-block small-text" onclick="openVitalSettings('temp')">
+            <div class="v-header"><div>TEMP</div><div class="v-limits" id="temp_limits">38.0<br>35.0</div></div>
+            <div class="v-value" id="temp_val">--.-</div>
+            <div class="v-unit">°C</div>
+        </div>
+    </div>
+</div>
+
+<div class="volume-control-bar" id="volume_control_bar">
+    <span class="vol-label" id="vol_bar_label">QRS VOLUME</span>
+    <button class="vol-btn" onclick="setVolume(0)">0</button>
+    <button class="vol-btn" onclick="setVolume(1)">1</button>
+    <button class="vol-btn" onclick="setVolume(2)">2</button>
+    <button class="vol-btn" onclick="setVolume(3)">3</button>
+    <button class="vol-btn" onclick="setVolume(4)">4</button>
+    <button class="vol-btn selected" onclick="setVolume(5)">5</button>
+    <button class="vol-btn" onclick="setVolume(6)">6</button>
+    <button class="vol-btn" onclick="setVolume(7)">7</button>
+    <button class="vol-btn" onclick="setVolume(8)">8</button>
+    <button class="vol-btn" onclick="setVolume(9)">9</button>
+    <button class="vol-btn" onclick="setVolume(10)">10</button>
+</div>
+
+<div class="interaction-dock">
+    <div class="soft-btn" id="btn_silence" onclick="toggleAlarmSilence()">
+        <i>🔇</i><span class="btn-label">Pause Alarms</span>
+    </div>
+    <div class="soft-btn btn-yellow" id="btn_alarms" onclick="showAlarmSettings()">
+        <i>⚠</i><span class="btn-label">Alarms</span>
+    </div>
+    <div class="soft-btn btn-green" id="btn_nibp" onclick="triggerNIBP()">
+        <i>▶</i><span class="btn-label">NIBP</span>
+    </div>
+    <div class="soft-btn" id="btn_qrs_vol" onclick="toggleVolumeBar('qrs')">
+        <i>♪</i><span class="btn-label">QRS Vol</span>
+    </div>
+    <div class="soft-btn btn-yellow" id="btn_alarm_vol" onclick="toggleVolumeBar('alarm')">
+        <i>🔔</i><span class="btn-label">Alarm Vol</span>
+    </div>
+    <div class="soft-btn" onclick="showMenu()">
+        <i>⚙</i><span class="btn-label">Menu</span>
+    </div>
+</div>
+
+<script>
+// ==================== SOCKET & CONNECTION ====================
+var socket = io();
+var urlParams = new URLSearchParams(window.location.search);
+var roomCode = urlParams.get('room');
+
+// ==================== STATE MANAGEMENT ====================
+var current = { hr: 60, spo2: 98, resp: 16, etco2: 35, abp_sys: 120, abp_dia: 80, temp: 36.8 };
+var target = { hr: 60, spo2: 98, resp: 16, etco2: 35, abp_sys: 120, abp_dia: 80, temp: 36.8 };
+var pendingNIBP = { sys: 120, dia: 80, hasPending: false };
+var displayedNIBP = { sys: null, dia: null, hasReading: false };
+var states = { hr_on: false, spo2_on: false, resp_on: false, etco2_on: false, nibp_on: false, abp_on: false, temp_on: false };
+var rhythm = 'nsr';
+var artifact = 'normal';
+// ==================== ECTOPIC BEATS ====================
+var ectopicEnabled = false;
+var ectopicFrequency = 'medium'; // 'low', 'medium', 'frequent'
+var ectopicInProgress = false;
+var ectopicBeatNumber = 0;
+var nextEctopicIn = 0;
+var prevBeatPhase = 0;
+
+function scheduleNextEctopic() {
+    switch(ectopicFrequency) {
+        case 'low':      nextEctopicIn = 10 + Math.floor(Math.random() * 11); break; // every 10-20 beats
+        case 'medium':   nextEctopicIn = 5 + Math.floor(Math.random() * 4);   break; // every 5-8 beats
+        case 'frequent': nextEctopicIn = 1 + Math.floor(Math.random() * 2);   break; // every 1-2 beats
+        default:         nextEctopicIn = 5 + Math.floor(Math.random() * 4);
+    }
+}
+// ==================== MASTER CONTROL STATE ====================
+var isPaused = false;
+var isCPRActive = false;
+var shockActive = false;
+var resetPending = false;
+var shockStartTime = 0;
+var masterVolume = 0.5;
+
+// ==================== SLEW RATES ====================
+var SLEW_RATES = { hr: 0.3, spo2: 0.1, resp: 0.1, etco2: 0.2, abp_sys: 1.0, abp_dia: 1.0, temp: 0.02 };
+
+function updateTransitions() {
+    if (isPaused) return;
+    var keys = ['hr', 'spo2', 'resp', 'etco2', 'abp_sys', 'abp_dia', 'temp'];
+    keys.forEach(function(key) {
+        var diff = target[key] - current[key];
+        var step = SLEW_RATES[key] || 0.1;
+        if (Math.abs(diff) <= step) current[key] = target[key];
+        else current[key] += (diff > 0 ? 1 : -1) * step;
+    });
+}
+
+// ==================== ALARM STATE ====================
+var alarmState = { hr: false, spo2: false, resp: false, nibp: false, temp: false, etco2: false };
+var alarmsSilenced = false;
+var alarmSilenceTimer = null;
+
+// ==================== PLETH COLOR ====================
+var plethColorBlue = true;
+function togglePlethColor() {
+    plethColorBlue = !plethColorBlue;
+    var color = plethColorBlue ? '#64d2ff' : '#ffd60a';
+    document.getElementById('pleth_label').style.color = color;
+    document.getElementById('pleth_color_hint').innerText = 'COLOR: ' + (plethColorBlue ? 'BLUE' : 'YELLOW');
+    document.getElementById('pleth_color_hint').style.opacity = '0.5';
+    var block = document.getElementById('block_spo2');
+    if (plethColorBlue) block.classList.remove('alt-color');
+    else block.classList.add('alt-color');
+    setTimeout(function() { document.getElementById('pleth_color_hint').style.opacity = '0'; }, 2000);
+}
+
+// ==================== VITAL SETTINGS OVERLAY ====================
+var nibpCycleInterval = null;
+var nibpCycleTime = 0; // 0 = off
+
+function openVitalSettings(type) {
+    var overlay = document.getElementById('vital_overlay');
+    var title = document.getElementById('vital_modal_title');
+    var content = document.getElementById('vital_modal_content');
+    var limits = alarmLimits[patientType];
+    var html = '';
+    
+    if (type === 'hr') {
+        title.innerHTML = '<span style="color: var(--ecg-color);">HR Alarm Limits</span>';
+        html = '<div class="vital-modal-row"><span class="vital-modal-label">High Limit</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'hr_high\', -5)">−</button>' +
+            '<span class="vital-modal-num" id="limit_hr_high" style="color: var(--ecg-color);">' + limits.hr_high + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'hr_high\', 5)">+</button></div></div>' +
+            '<div class="vital-modal-row"><span class="vital-modal-label">Low Limit</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'hr_low\', -5)">−</button>' +
+            '<span class="vital-modal-num" id="limit_hr_low" style="color: var(--ecg-color);">' + limits.hr_low + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'hr_low\', 5)">+</button></div></div>';
+    } else if (type === 'spo2') {
+        title.innerHTML = '<span style="color: var(--spo2-color);">SpO2 Settings</span>';
+        html = '<div class="vital-modal-row"><span class="vital-modal-label">Low Limit</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'spo2_low\', -1)">−</button>' +
+            '<span class="vital-modal-num" id="limit_spo2_low" style="color: var(--spo2-color);">' + limits.spo2_low + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'spo2_low\', 1)">+</button></div></div>' +
+            '<div class="vital-modal-row" style="flex-direction: column; align-items: stretch; gap: 10px;"><span class="vital-modal-label">Waveform Color</span>' +
+            '<div style="display: flex; gap: 10px;">' +
+            '<button class="color-btn blue ' + (plethColorBlue ? 'active' : '') + '" id="color_blue" onclick="setPlethColorFromModal(true)">BLUE</button>' +
+            '<button class="color-btn yellow ' + (!plethColorBlue ? 'active' : '') + '" id="color_yellow" onclick="setPlethColorFromModal(false)">YELLOW</button></div></div>';
+    } else if (type === 'nibp') {
+        title.innerHTML = '<span style="color: var(--resp-color);">NIBP Settings</span>';
+        html = '<div class="vital-modal-row" style="flex-direction: column; align-items: stretch; gap: 10px;"><span class="vital-modal-label">Auto Cycle Interval</span>' +
+            '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 0 ? 'active' : '') + '" onclick="setNibpCycle(0)">OFF</button>' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 30 ? 'active' : '') + '" onclick="setNibpCycle(30)">30s</button>' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 60 ? 'active' : '') + '" onclick="setNibpCycle(60)">1m</button>' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 120 ? 'active' : '') + '" onclick="setNibpCycle(120)">2m</button>' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 180 ? 'active' : '') + '" onclick="setNibpCycle(180)">3m</button>' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 300 ? 'active' : '') + '" onclick="setNibpCycle(300)">5m</button></div></div>';
+    } else if (type === 'abp') {
+        title.innerHTML = '<span style="color: var(--abp-color);">ABP Alarm Limits</span>';
+        html = '<div class="vital-modal-row"><span class="vital-modal-label">Systolic High</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'abp_sys_high\', -5)">−</button>' +
+            '<span class="vital-modal-num" id="limit_abp_sys_high" style="color: var(--abp-color);">' + limits.abp_sys_high + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'abp_sys_high\', 5)">+</button></div></div>' +
+            '<div class="vital-modal-row"><span class="vital-modal-label">Systolic Low</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'abp_sys_low\', -5)">−</button>' +
+            '<span class="vital-modal-num" id="limit_abp_sys_low" style="color: var(--abp-color);">' + limits.abp_sys_low + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'abp_sys_low\', 5)">+</button></div></div>';
+    } else if (type === 'etco2') {
+        title.innerHTML = '<span style="color: var(--etco2-color);">EtCO2 Alarm Limits</span>';
+        html = '<div class="vital-modal-row"><span class="vital-modal-label">High Limit</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'etco2_high\', -5)">−</button>' +
+            '<span class="vital-modal-num" id="limit_etco2_high" style="color: var(--etco2-color);">' + limits.etco2_high + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'etco2_high\', 5)">+</button></div></div>' +
+            '<div class="vital-modal-row"><span class="vital-modal-label">Low Limit</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'etco2_low\', -5)">−</button>' +
+            '<span class="vital-modal-num" id="limit_etco2_low" style="color: var(--etco2-color);">' + limits.etco2_low + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'etco2_low\', 5)">+</button></div></div>';
+    } else if (type === 'resp') {
+        title.innerHTML = '<span style="color: var(--resp-color);">RR Alarm Limits</span>';
+        html = '<div class="vital-modal-row"><span class="vital-modal-label">High Limit</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'resp_high\', -2)">−</button>' +
+            '<span class="vital-modal-num" id="limit_resp_high" style="color: var(--resp-color);">' + limits.resp_high + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'resp_high\', 2)">+</button></div></div>' +
+            '<div class="vital-modal-row"><span class="vital-modal-label">Low Limit</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'resp_low\', -2)">−</button>' +
+            '<span class="vital-modal-num" id="limit_resp_low" style="color: var(--resp-color);">' + limits.resp_low + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'resp_low\', 2)">+</button></div></div>';
+    } else if (type === 'temp') {
+        title.innerHTML = '<span style="color: var(--temp-color);">Temp Alarm Limits</span>';
+        html = '<div class="vital-modal-row"><span class="vital-modal-label">High Limit</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'temp_high\', -0.5)">−</button>' +
+            '<span class="vital-modal-num" id="limit_temp_high" style="color: var(--temp-color);">' + limits.temp_high.toFixed(1) + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'temp_high\', 0.5)">+</button></div></div>' +
+            '<div class="vital-modal-row"><span class="vital-modal-label">Low Limit</span><div class="vital-modal-value">' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'temp_low\', -0.5)">−</button>' +
+            '<span class="vital-modal-num" id="limit_temp_low" style="color: var(--temp-color);">' + limits.temp_low.toFixed(1) + '</span>' +
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'temp_low\', 0.5)">+</button></div></div>';
+    }
+    
+    content.innerHTML = html;
+    overlay.classList.add('active');
+}
+
+function closeVitalOverlay() {
+    document.getElementById('vital_overlay').classList.remove('active');
+}
+
+function adjustLimit(key, delta) {
+    var limits = alarmLimits[patientType];
+    if (key === 'hr_high') { limits.hr_high = Math.max(limits.hr_low + 10, Math.min(250, limits.hr_high + delta)); document.getElementById('limit_hr_high').innerText = limits.hr_high; }
+    else if (key === 'hr_low') { limits.hr_low = Math.max(20, Math.min(limits.hr_high - 10, limits.hr_low + delta)); document.getElementById('limit_hr_low').innerText = limits.hr_low; }
+    else if (key === 'spo2_low') { limits.spo2_low = Math.max(70, Math.min(99, limits.spo2_low + delta)); document.getElementById('limit_spo2_low').innerText = limits.spo2_low; }
+    else if (key === 'resp_high') { limits.resp_high = Math.max(limits.resp_low + 5, Math.min(60, limits.resp_high + delta)); document.getElementById('limit_resp_high').innerText = limits.resp_high; }
+    else if (key === 'resp_low') { limits.resp_low = Math.max(0, Math.min(limits.resp_high - 5, limits.resp_low + delta)); document.getElementById('limit_resp_low').innerText = limits.resp_low; }
+    else if (key === 'temp_high') { limits.temp_high = Math.max(limits.temp_low + 0.5, Math.min(42, limits.temp_high + delta)); document.getElementById('limit_temp_high').innerText = limits.temp_high.toFixed(1); }
+    else if (key === 'temp_low') { limits.temp_low = Math.max(30, Math.min(limits.temp_high - 0.5, limits.temp_low + delta)); document.getElementById('limit_temp_low').innerText = limits.temp_low.toFixed(1); }
+    else if (key === 'abp_sys_high') { limits.abp_sys_high = Math.max(limits.abp_sys_low + 20, Math.min(250, limits.abp_sys_high + delta)); document.getElementById('limit_abp_sys_high').innerText = limits.abp_sys_high; }
+    else if (key === 'abp_sys_low') { limits.abp_sys_low = Math.max(40, Math.min(limits.abp_sys_high - 20, limits.abp_sys_low + delta)); document.getElementById('limit_abp_sys_low').innerText = limits.abp_sys_low; }
+    else if (key === 'etco2_high') { limits.etco2_high = Math.max(limits.etco2_low + 5, Math.min(80, limits.etco2_high + delta)); document.getElementById('limit_etco2_high').innerText = limits.etco2_high; }
+    else if (key === 'etco2_low') { limits.etco2_low = Math.max(10, Math.min(limits.etco2_high - 5, limits.etco2_low + delta)); document.getElementById('limit_etco2_low').innerText = limits.etco2_low; }
+    updateLimitDisplays();
+}
+
+function updateLimitDisplays() {
+    var l = alarmLimits[patientType];
+    document.getElementById('hr_limits').innerHTML = l.hr_high + '<br>' + l.hr_low;
+    document.getElementById('spo2_limits').innerHTML = '100<br>' + l.spo2_low;
+    document.getElementById('resp_limits').innerHTML = l.resp_high + '<br>' + l.resp_low;
+    document.getElementById('temp_limits').innerHTML = l.temp_high.toFixed(1) + '<br>' + l.temp_low.toFixed(1);
+}
+
+function setPlethColorFromModal(isBlue) {
+    plethColorBlue = isBlue;
+    var color = plethColorBlue ? '#64d2ff' : '#ffd60a';
+    document.getElementById('pleth_label').style.color = color;
+    var block = document.getElementById('block_spo2');
+    if (plethColorBlue) block.classList.remove('alt-color');
+    else block.classList.add('alt-color');
+    document.getElementById('color_blue').classList.toggle('active', isBlue);
+    document.getElementById('color_yellow').classList.toggle('active', !isBlue);
+}
+
+function setNibpCycle(seconds) {
+    nibpCycleTime = seconds;
+    if (nibpCycleInterval) { clearInterval(nibpCycleInterval); nibpCycleInterval = null; }
+    if (seconds > 0) {
+        nibpCycleInterval = setInterval(function() {
+            if (states.nibp_on && !nibpCycling) triggerNIBP();
+        }, seconds * 1000);
+    }
+    document.querySelectorAll('.cycle-btn').forEach(function(btn) { btn.classList.remove('active'); });
+    event.target.classList.add('active');
+}
+// ==================== AUDIO ====================
+var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+var qrsVolume = 0.5;
+var alarmVolume = 0.5;
+var activeVolumeBar = null;
+
+function playHeartbeatBeep() {
+    if (!states.hr_on || current.hr <= 0 || qrsVolume === 0 || isPaused) return;
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    var clampedSpo2 = Math.max(40, Math.min(100, current.spo2));
+    var freq = 200 + ((clampedSpo2 - 40) / 60) * 680;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    var vol = qrsVolume * masterVolume * 0.15;
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+}
+
+// ==================== IEC 60601-1-8 ALARM SYSTEM ====================
+function getAlarmPriority() {
+    // HIGH: life-threatening
+    if (states.hr_on && current.hr === 0) return 'high';                          // asystole
+    if (states.spo2_on && current.spo2 < 80) return 'high';                      // critical desat
+    if (states.abp_on && current.abp_sys < 60) return 'high';                    // severe hypotension
+    if (rhythm === 'vf' || rhythm === 'vt' || rhythm === 'asystole') return 'high'; // lethal rhythms
+
+    // MEDIUM: out of range
+    for (var k in alarmState) { if (alarmState[k]) return 'medium'; }
+
+    return 'none';
+}
+
+function playAlarmPulse(freq, duration, volume, delay) {
+    // IEC compliant pulse: fundamental + harmonics, 10ms rise/fall
+    setTimeout(function() {
+        var fundamental = audioCtx.createOscillator();
+        var h2 = audioCtx.createOscillator();
+        var h3 = audioCtx.createOscillator();
+        var h4 = audioCtx.createOscillator();
+        var gain = audioCtx.createGain();
+
+        fundamental.frequency.value = freq;
+        h2.frequency.value = freq * 2;
+        h3.frequency.value = freq * 3;
+        h4.frequency.value = freq * 4;
+
+        // Mix harmonics slightly quieter than fundamental
+        var mix = audioCtx.createGain();
+        mix.gain.value = 0.6;
+
+        fundamental.connect(gain);
+        h2.connect(mix); h3.connect(mix); h4.connect(mix);
+        mix.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        var t = audioCtx.currentTime;
+        var vol = volume * alarmVolume * masterVolume;
+        // 10ms rise, sustain, 10ms fall (IEC: rise ≥ 10ms)
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.linearRampToValueAtTime(vol, t + 0.01);
+        gain.gain.setValueAtTime(vol, t + duration - 0.01);
+        gain.gain.linearRampToValueAtTime(0.0001, t + duration);
+
+        [fundamental, h2, h3, h4].forEach(function(o) { o.start(t); o.stop(t + duration); });
+    }, delay);
+}
+
+function playAlarmTone() {
+    var priority = getAlarmPriority();
+    if (priority === 'none') return;
+
+    if (priority === 'high') {
+        // HIGH: 10 pulses grouped 5+5, short pulses (50ms), fast spacing
+        // Group 1: 5 pulses
+        for (var i = 0; i < 5; i++) {
+            playAlarmPulse(480, 0.05, 0.25, i * 100);
+        }
+        // Brief gap (150ms) then Group 2: 5 pulses
+        for (var j = 0; j < 5; j++) {
+            playAlarmPulse(480, 0.05, 0.25, 650 + j * 100);
+        }
+    } else if (priority === 'medium') {
+        // MEDIUM: 3 pulses, moderate duration (150ms), moderate spacing
+        for (var k = 0; k < 3; k++) {
+            playAlarmPulse(440, 0.15, 0.18, k * 300);
+        }
+    }
+}
+
+function playShockSound() {
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3);
+    var vol = masterVolume * 0.4;
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+}
+
+// ==================== WAVEFORM STATE ====================
+var cardiacX = 0, respX = 0;
+var lastEcgY = 0, lastSpo2Y = 0, lastRespY = 0, lastAbpY = 0, lastEtco2Y = 0;
+var nibpCycling = false;
+var SWEEP_SPEEDS = { cardiac: 2.5, resp: 0.8 };
+var ecgCtx, spo2Ctx, respCtx, abpCtx, etco2Ctx;
+
+// ==================== SOCKET HANDLERS ====================
+socket.on('connect', function() { 
+    socket.emit('join', { room: roomCode, type: 'monitor' }); 
+    document.getElementById('connection-status').innerHTML = '● REMOTE CONNECTED';
+    document.getElementById('connection-status').style.color = 'var(--ecg-color)';
+});
+
+socket.on('disconnect', function() {
+    document.getElementById('connection-status').innerHTML = '● DISCONNECTED';
+    document.getElementById('connection-status').style.color = 'var(--alarm-red)';
+});
+
+socket.on('update_monitor', function(data) {
+    console.log('GOT MESSAGE:', data.type);
+    if (data.type === 'vitals_adv') {
+        target.hr = parseFloat(data.hr) || target.hr;
+        target.spo2 = parseFloat(data.spo2) || target.spo2;
+        target.resp = parseFloat(data.resp) || target.resp;
+        target.etco2 = parseFloat(data.etco2) || target.etco2;
+        target.abp_sys = parseFloat(data.abp_sys) || target.abp_sys;
+        target.abp_dia = parseFloat(data.abp_dia) || target.abp_dia;
+        target.temp = parseFloat(data.temp) || target.temp;
+        if (data.sys && data.dia) {
+            pendingNIBP.sys = parseFloat(data.sys);
+            pendingNIBP.dia = parseFloat(data.dia);
+            if (states.nibp_on && !nibpCycling) {
+                pendingNIBP.hasPending = true;
+                document.getElementById('btn_nibp').classList.add('has-pending');
+            }
+        // If ALL toggles are off, treat as a full reset — return to power screen
+        if (!data.hr_on && !data.spo2_on && !data.resp_on && 
+            !data.etco2_on && !data.nibp_on && !data.abp_on && !data.temp_on) {
+            resetMonitor();
+        }
+        }
+        states.hr_on = data.hr_on; states.spo2_on = data.spo2_on; states.resp_on = data.resp_on;
+        states.etco2_on = data.etco2_on; states.nibp_on = data.nibp_on; states.abp_on = data.abp_on; states.temp_on = data.temp_on;
+        if (data.rhythm) rhythm = data.rhythm;
+        if (data.artifact) artifact = data.artifact;
+        if (typeof data.ectopic !== 'undefined') {
+            ectopicEnabled = data.ectopic;
+            if (data.ectopic_freq) ectopicFrequency = data.ectopic_freq;
+            if (ectopicEnabled && nextEctopicIn === 0) scheduleNextEctopic();
+        }
+        handleSpecialRow('abp', states.abp_on);
+        handleSpecialRow('etco2', states.etco2_on);
+        // If all toggles are off (reset signal from controller), reset monitor
+        if (data.is_reset || (!data.hr_on && !data.spo2_on && !data.resp_on && 
+            !data.etco2_on && !data.nibp_on && !data.abp_on && !data.temp_on)) {
+            resetMonitor();
+        }
+        if (data.is_reset) {
+            resetMonitor();
+        }
+    } else if (data.type === 'rhythm') {
+        rhythm = data.rhythm;
+    } else if (data.type === 'nibp_reading') {
+        pendingNIBP.sys = parseFloat(data.sys) || pendingNIBP.sys;
+        pendingNIBP.dia = parseFloat(data.dia) || pendingNIBP.dia;
+        pendingNIBP.hasPending = true;
+        states.nibp_on = data.nibp_on;
+        document.getElementById('btn_nibp').classList.add('has-pending');
+    } else if (data.type === 'trigger_nibp') {
+        triggerNIBP();
+    } else if (data.type === 'reset') {
+        resetMonitor();
+    } else if (data.type === 'pause') {
+        isPaused = data.paused;
+        document.getElementById('pause_overlay').classList.toggle('active', isPaused);
+    } else if (data.type === 'cpr') {
+        isCPRActive = data.active;
+    } else if (data.type === 'shock') {
+        triggerShock();
+    } else if (data.type === 'master_volume') {
+        masterVolume = data.volume / 100;
+    } else if (data.type === 'system_reset') {
+        location.reload();
+    } else if (data.type === 'force_reload') {
+        window.location.reload();
+    }
+});
+
+function triggerShock() {
+    shockActive = true;
+    shockStartTime = performance.now();
+    playShockSound();
+    setTimeout(function() { shockActive = false; }, 1000);
+}
+
+function resetMonitor() {
+    // Block all waveform drawing immediately
+    resetPending = true;
+    
+    current = { hr: 75, spo2: 98, resp: 16, etco2: 35, abp_sys: 120, abp_dia: 80, temp: 36.8 };
+    target = { hr: 75, spo2: 98, resp: 16, etco2: 35, abp_sys: 120, abp_dia: 80, temp: 36.8 };
+    pendingNIBP = { sys: 120, dia: 80, hasPending: false };
+    displayedNIBP = { sys: null, dia: null, hasReading: false };
+    document.getElementById('btn_nibp').classList.remove('has-pending');
+    states = { hr_on: false, spo2_on: false, resp_on: false, etco2_on: false, nibp_on: false, abp_on: false, temp_on: false };
+    rhythm = 'nsr'; artifact = 'normal';
+    ectopicEnabled = false; ectopicInProgress = false; ectopicFrequency = 'medium';
+    cardiacX = 0; respX = 0;
+    isPaused = false; isCPRActive = false; shockActive = false;
+    document.getElementById('pause_overlay').classList.remove('active');
+    handleSpecialRow('abp', false);
+    handleSpecialRow('etco2', false);
+    alarmState = { hr: false, spo2: false, resp: false, nibp: false, temp: false, etco2: false };
+    alarmsSilenced = false;
+    document.getElementById('btn_silence').classList.remove('active');
+    
+    // Clear canvases repeatedly to catch any frames drawn between resets
+    clearAllCanvases();
+    setTimeout(clearAllCanvases, 50);
+    setTimeout(clearAllCanvases, 100);
+    // Return to power screen
+    if (typeof isPoweredOn !== 'undefined') {
+        isPoweredOn = false;
+        document.getElementById('power_overlay').classList.remove('hidden');
+    }
+    // Release the drawing block after 500ms — by then states are
+    // guaranteed to be applied and no stale frames can sneak through
+    setTimeout(function() {
+        clearAllCanvases();
+        resetPending = false;
+    }, 500);
+    document.getElementById('power_overlay').classList.remove('hidden');
+    isPoweredOn = false;
+}
+
+function clearAllCanvases() {
+    if (ecgCtx) { ecgCtx.clearRect(0, 0, ecgCtx.canvas.width, ecgCtx.canvas.height); lastEcgY = ecgCtx.canvas.height / 2; }
+    if (spo2Ctx) { spo2Ctx.clearRect(0, 0, spo2Ctx.canvas.width, spo2Ctx.canvas.height); lastSpo2Y = spo2Ctx.canvas.height * 0.7; }
+    if (respCtx) { respCtx.clearRect(0, 0, respCtx.canvas.width, respCtx.canvas.height); lastRespY = respCtx.canvas.height * 0.5; }
+    if (abpCtx) { abpCtx.clearRect(0, 0, abpCtx.canvas.width, abpCtx.canvas.height); lastAbpY = abpCtx.canvas.height * 0.5; }
+    if (etco2Ctx) { etco2Ctx.clearRect(0, 0, etco2Ctx.canvas.width, etco2Ctx.canvas.height); lastEtco2Y = etco2Ctx.canvas.height * 0.85; }
+}
+
+var noiseTarget = { hr: 0, spo2: 0, resp: 0, etco2: 0, temp: 0, abp_sys: 0, abp_dia: 0 };
+var noiseCurrent = { hr: 0, spo2: 0, resp: 0, etco2: 0, temp: 0, abp_sys: 0, abp_dia: 0 };
+var noiseRanges = {
+    hr: 2,        // ±2 BPM
+    spo2: 1,      // ±1%
+    resp: 1,      // ±1 BRPM
+    etco2: 1,     // ±1 mmHg
+    temp: 0.1,    // ±0.1°C
+    abp_sys: 3,   // ±3 mmHg
+    abp_dia: 2    // ±2 mmHg
+};
+
+// Pick new random targets every 7 seconds
+setInterval(function() {
+    for (var vital in noiseTarget) {
+        noiseTarget[vital] = (Math.random() - 0.5) * 2 * noiseRanges[vital];
+    }
+}, 7000);
+
+// Smoothly ramp toward targets ~60 times per second
+setInterval(function() {
+    for (var vital in noiseCurrent) {
+        var diff = noiseTarget[vital] - noiseCurrent[vital];
+        // Ease toward target — covers the gap over ~7s at 60fps
+        noiseCurrent[vital] += diff * 0.02;
+    }
+}, 16);
+
+function getPhysiologicalNoise(vital) {
+    return noiseCurrent[vital] || 0;
+}
+
+function updateDisplayedValues() {
+    var hrDisplay = states.hr_on ? Math.round(current.hr + getPhysiologicalNoise('hr')) : null;
+    var spo2Display = states.spo2_on ? Math.min(100, Math.max(0, Math.round(current.spo2 + getPhysiologicalNoise('spo2')))) : null;
+    var respDisplay = states.resp_on ? Math.max(0, Math.round(current.resp + getPhysiologicalNoise('resp'))) : null;
+    var etco2Display = states.etco2_on ? Math.max(0, Math.round(current.etco2 + getPhysiologicalNoise('etco2'))) : null;
+    var tempDisplay = states.temp_on ? (current.temp + getPhysiologicalNoise('temp')) : null;
+    var abpSysNoise = getPhysiologicalNoise('abp_sys');
+    var abpDiaNoise = getPhysiologicalNoise('abp_dia');
+
+    document.getElementById('hr_val').innerText = hrDisplay !== null ? hrDisplay : '--';
+    document.getElementById('spo2_val').innerText = spo2Display !== null ? spo2Display : '--';
+    document.getElementById('resp_val').innerText = respDisplay !== null ? respDisplay : '--';
+    document.getElementById('etco2_val').innerText = etco2Display !== null ? etco2Display : '--';
+    
+    if (states.nibp_on && displayedNIBP.hasReading) {
+        document.getElementById('bp_val').innerText = displayedNIBP.sys + '/' + displayedNIBP.dia;
+    } else {
+        document.getElementById('bp_val').innerText = '--/--';
+    }
+    
+    var abpSysNoise = getPhysiologicalNoise('abp_sys', current.abp_sys);
+    var abpDiaNoise = getPhysiologicalNoise('abp_dia', current.abp_dia);
+    document.getElementById('abp_val').innerText = states.abp_on ? Math.round(current.abp_sys + abpSysNoise) + '/' + Math.round(current.abp_dia + abpDiaNoise) : '--/--';
+    document.getElementById('temp_val').innerText = tempDisplay !== null ? tempDisplay.toFixed(1) : '--.-';
+    
+    updateBlockState('hr', states.hr_on); updateBlockState('spo2', states.spo2_on);
+    updateBlockState('resp', states.resp_on); updateBlockState('etco2', states.etco2_on);
+    updateBlockState('nibp', states.nibp_on); updateBlockState('temp', states.temp_on);
+    checkAlarms();
+}
+
+function updateBlockState(id, isOn) {
+    var block = document.getElementById('block_' + id);
+    if (block) { if (isOn) block.classList.remove('dimmed'); else block.classList.add('dimmed'); }
+}
+
+function checkAlarms() {
+    var anyAlarm = false;
+    var limits = alarmLimits[patientType];
+    var hr = Math.round(current.hr);
+    var spo2 = Math.round(current.spo2);
+    var resp = Math.round(current.resp);
+    var temp = current.temp;
+    alarmState.hr = states.hr_on && (hr > limits.hr_high || hr < limits.hr_low);
+    alarmState.spo2 = states.spo2_on && spo2 < limits.spo2_low;
+    alarmState.resp = states.resp_on && (resp > limits.resp_high || resp < limits.resp_low);
+    alarmState.temp = states.temp_on && (temp > limits.temp_high || temp < limits.temp_low);
+    var priority = getAlarmPriority();
+    var cls = (priority === 'high') ? 'alarm-state' : 'alarm-medium';
+    ['block_hr','block_spo2','block_resp','block_temp'].forEach(function(id) {
+        document.getElementById(id).classList.remove('alarm-state', 'alarm-medium');
+    });
+    if (alarmState.hr)   document.getElementById('block_hr').classList.add(cls);
+    if (alarmState.spo2) document.getElementById('block_spo2').classList.add(cls);
+    if (alarmState.resp) document.getElementById('block_resp').classList.add(cls);
+    if (alarmState.temp) document.getElementById('block_temp').classList.add(cls);
+    for (var k in alarmState) { if (alarmState[k]) anyAlarm = true; }
+    var indicator = document.getElementById('alarm_status');
+    if (alarmsSilenced) {
+        indicator.style.display = 'none';
+    } else {
+        indicator.style.display = 'flex';
+        if (anyAlarm) {
+            var isHigh = (getAlarmPriority() === 'high');
+            indicator.classList.add('active-alarm'); indicator.innerText = isHigh ? '⚠ CRITICAL' : 'ALARM ACTIVE';
+        } else {
+            indicator.classList.remove('active-alarm'); indicator.innerText = 'NO ALARMS'; indicator.style.color = '#ccc';
+        }
+    }
+}
+
+function handleSpecialRow(id, isOn) {
+    var block = document.getElementById('block_' + id);
+    var row = document.getElementById('row_' + id);
+    if (isOn) {
+        block.classList.remove('hidden'); row.classList.remove('hidden');
+        if (id === 'abp' && !abpCtx) {
+            var canvas = document.getElementById('abpCanvas');
+            canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight;
+            abpCtx = canvas.getContext('2d'); lastAbpY = canvas.height * 0.5;
+        }
+        if (id === 'etco2' && !etco2Ctx) {
+            var canvas = document.getElementById('etco2Canvas');
+            canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight;
+            etco2Ctx = canvas.getContext('2d'); lastEtco2Y = canvas.height * 0.85;
+        }
+    } else {
+        block.classList.add('hidden'); row.classList.add('hidden');
+    }
+}
+
+// ==================== CLOCK ====================
+function updateClock() { document.getElementById('clock').innerText = new Date().toTimeString().split(' ')[0]; }
+setInterval(updateClock, 1000);
+
+// ==================== CANVAS SETUP ====================
+function initCanvases() {
+    var ecgCanvas = document.getElementById('ecgCanvas');
+    var spo2Canvas = document.getElementById('spo2Canvas');
+    var respCanvas = document.getElementById('respCanvas');
+    [ecgCanvas, spo2Canvas, respCanvas].forEach(function(c) { c.width = c.clientWidth; c.height = c.clientHeight; });
+    ecgCtx = ecgCanvas.getContext('2d');
+    spo2Ctx = spo2Canvas.getContext('2d');
+    respCtx = respCanvas.getContext('2d');
+    lastEcgY = ecgCanvas.height / 2;
+    lastSpo2Y = spo2Canvas.height * 0.7;
+    lastRespY = respCanvas.height * 0.5;
+}
+
+window.addEventListener('resize', function() {
+    ['ecgCanvas', 'spo2Canvas', 'respCanvas', 'abpCanvas', 'etco2Canvas'].forEach(function(id) {
+        var c = document.getElementById(id);
+        if (c) { c.width = c.clientWidth; c.height = c.clientHeight; }
+    });
+});
+
+// ==================== WAVEFORM GENERATORS ====================
+function getCPRArtifact(phase) {
+    var cprPhase = (phase * 2) % 1;
+    return Math.sin(cprPhase * Math.PI * 2) * 3 + (Math.random() - 0.5) * 1.5;
+}
+
+function getShockArtifact(timeSinceShock) {
+    if (timeSinceShock > 500) return 0;
+    var t = timeSinceShock / 500;
+    var spike = Math.exp(-t * 8) * Math.sin(t * 50) * 15;
+    return spike + (Math.random() - 0.5) * 3 * (1 - t);
+}
+
+// Helper: standard P-QRS-T complex
+function getNormalComplex(p) {
+    if (p >= 0.08 && p < 0.18) return Math.sin(((p - 0.08) / 0.10) * Math.PI) * 1.2;
+    if (p >= 0.18 && p < 0.28) return 0;
+    if (p >= 0.28 && p < 0.30) return -Math.sin(((p - 0.28) / 0.02) * Math.PI) * 0.8;
+    if (p >= 0.30 && p < 0.32) return ((p - 0.30) / 0.02) * 10;
+    if (p >= 0.32 && p < 0.34) return 10 - ((p - 0.32) / 0.02) * 12;
+    if (p >= 0.34 && p < 0.37) return -2 + ((p - 0.34) / 0.03) * 2;
+    if (p >= 0.37 && p < 0.45) return 0;
+    if (p >= 0.45 && p < 0.60) return Math.sin(((p - 0.45) / 0.15) * Math.PI) * 2.2;
+    return 0;
+}
+
+// PVC shape parameters — randomised per beat
+var pvcParams = { upAmp: 8, downAmp: -7, width: 1.0 };
+
+function randomisePVC() {
+    pvcParams.upAmp = 6 + Math.random() * 4;          // 6-10
+    pvcParams.downAmp = -(5 + Math.random() * 4);      // -5 to -9
+    pvcParams.width = 0.85 + Math.random() * 0.3;      // 0.85-1.15 (stretches/compresses timing)
+}
+
+function getPVCComplex(p) {
+    var w = pvcParams.width;
+    var up = pvcParams.upAmp;
+    var down = pvcParams.downAmp;
+    
+    if (p < 0.08 * w) return (Math.random() - 0.5) * 0.15;
+    if (p < 0.13 * w) return ((p - 0.08 * w) / (0.05 * w)) * up;
+    if (p < 0.20 * w) return up - ((p - 0.13 * w) / (0.07 * w)) * (up - down);
+    if (p < 0.28 * w) return down - ((p - 0.20 * w) / (0.08 * w)) * down;
+    if (p < 0.38 * w) return 0;
+    return (Math.random() - 0.5) * 0.08;
+}
+
+function getEcgPoint(phase, rhythmType) {
+    var cprArtifact = isCPRActive ? getCPRArtifact(phase) : 0;
+    var baseValue = 0;
+
+    switch(rhythmType) {
+        case 'vf':
+            baseValue = (Math.sin(phase * 47) + Math.sin(phase * 31) + Math.random() * 0.5) * 2.5;
+            break;
+
+        case 'asystole':
+            baseValue = (Math.random() - 0.5) * 0.15;
+            break;
+
+        case 'vt':
+            var vtPhase = phase % 1;
+            if (vtPhase < 0.4) baseValue = Math.sin((vtPhase / 0.4) * Math.PI) * 7 * (1 - Math.abs(vtPhase / 0.4 - 0.5) * 0.5);
+            else baseValue = (Math.random() - 0.5) * 0.3;
+            break;
+
+        case 'pea':
+            baseValue = getEcgPoint(phase, 'nsr');
+            return baseValue + cprArtifact;
+
+        case 'afib': {
+            var afibBase = (Math.sin(phase * 23) + Math.sin(phase * 17)) * 0.3;
+            var afibPhase = (phase + Math.sin(phase * 7) * 0.1) % 1;
+            if (afibPhase > 0.40 && afibPhase < 0.54) {
+                if (afibPhase < 0.42) baseValue = afibBase + (afibPhase - 0.40) * 50;
+                else if (afibPhase < 0.46) baseValue = afibBase + 1 + ((afibPhase - 0.42) / 0.04) * 7;
+                else if (afibPhase < 0.50) baseValue = afibBase + 8 - ((afibPhase - 0.46) / 0.04) * 16;
+                else baseValue = afibBase - 8 + ((afibPhase - 0.50) / 0.04) * 8;
+            } else if (afibPhase > 0.60 && afibPhase < 0.75) {
+                baseValue = afibBase + Math.sin(((afibPhase - 0.60) / 0.15) * Math.PI) * 1.5;
+            } else {
+                baseValue = afibBase;
+            }
+            break;
+        }
+
+        // SVT — narrow QRS, no P waves, rapid rate
+        case 'svt': {
+            var sp = phase % 1;
+            if (sp < 0.28) baseValue = (Math.random() - 0.5) * 0.15;
+            else if (sp >= 0.28 && sp < 0.30) baseValue = -Math.sin(((sp - 0.28) / 0.02) * Math.PI) * 0.6;
+            else if (sp >= 0.30 && sp < 0.32) baseValue = ((sp - 0.30) / 0.02) * 10;
+            else if (sp >= 0.32 && sp < 0.34) baseValue = 10 - ((sp - 0.32) / 0.02) * 12;
+            else if (sp >= 0.34 && sp < 0.37) baseValue = -2 + ((sp - 0.34) / 0.03) * 2;
+            else if (sp >= 0.37 && sp < 0.42) baseValue = 0;
+            else if (sp >= 0.42 && sp < 0.55) baseValue = Math.sin(((sp - 0.42) / 0.13) * Math.PI) * 1.5;
+            else baseValue = 0;
+            break;
+        }
+
+        // Atrial Flutter — sawtooth baseline with QRS
+        case 'aflutter': {
+            var fp = phase % 1;
+            var flutterFreq = 5;
+            var sawtooth = ((fp * flutterFreq) % 1);
+            var flutterWave;
+            if (sawtooth < 0.85) flutterWave = -sawtooth / 0.85;
+            else flutterWave = -1 + ((sawtooth - 0.85) / 0.15);
+            flutterWave *= 1.8;
+            if (fp >= 0.30 && fp < 0.32) baseValue = flutterWave + ((fp - 0.30) / 0.02) * 10;
+            else if (fp >= 0.32 && fp < 0.34) baseValue = flutterWave + 10 - ((fp - 0.32) / 0.02) * 12;
+            else if (fp >= 0.34 && fp < 0.37) baseValue = flutterWave + (-2 + ((fp - 0.34) / 0.03) * 2);
+            else baseValue = flutterWave;
+            break;
+        }
+
+        // 1st Degree AV Block — prolonged PR interval (>0.20s)
+        // Normal P-QRS-T but with extended isoelectric gap between P and QRS
+        case 'avb1': {
+            var p1 = phase % 1;
+            // P wave — normal position, clearly visible
+            if (p1 >= 0.05 && p1 < 0.15) baseValue = Math.sin(((p1 - 0.05) / 0.10) * Math.PI) * 1.5;
+            // Prolonged PR interval — long flat segment
+            else if (p1 >= 0.15 && p1 < 0.38) baseValue = 0;
+            // Q wave
+            else if (p1 >= 0.38 && p1 < 0.40) baseValue = -Math.sin(((p1 - 0.38) / 0.02) * Math.PI) * 0.8;
+            // R wave up
+            else if (p1 >= 0.40 && p1 < 0.42) baseValue = ((p1 - 0.40) / 0.02) * 10;
+            // R wave down into S
+            else if (p1 >= 0.42 && p1 < 0.44) baseValue = 10 - ((p1 - 0.42) / 0.02) * 12;
+            // S wave recovery
+            else if (p1 >= 0.44 && p1 < 0.47) baseValue = -2 + ((p1 - 0.44) / 0.03) * 2;
+            // ST segment
+            else if (p1 >= 0.47 && p1 < 0.55) baseValue = 0;
+            // T wave
+            else if (p1 >= 0.55 && p1 < 0.70) baseValue = Math.sin(((p1 - 0.55) / 0.15) * Math.PI) * 2.2;
+            else baseValue = 0;
+            break;
+        }
+
+        // 2nd Degree Type I (Wenckebach) — progressive PR then dropped QRS
+        // 4-beat cycle: beats 0-2 conduct with lengthening PR, beat 3 is P-wave only
+        case 'avb2_type1': {
+            var wp = phase % 1;
+            var wenckBeat = ectopicBeatNumber % 4;
+
+            // P wave is ALWAYS present at the same position
+            var pWave = 0;
+            if (wp >= 0.05 && wp < 0.15) pWave = Math.sin(((wp - 0.05) / 0.10) * Math.PI) * 1.5;
+
+            if (wenckBeat === 3) {
+                // Dropped beat — only P wave, no QRS/T
+                baseValue = pWave + (Math.random() - 0.5) * 0.05;
+            } else {
+                // PR delay increases each beat: 0.22, 0.30, 0.38
+                var prEnd = 0.22 + (wenckBeat * 0.08);
+                
+                if (wp < prEnd) {
+                    // We're still in the P-wave or PR segment
+                    baseValue = pWave;
+                } else {
+                    // QRS-T complex starts after variable PR
+                    var qp = wp - prEnd; // local time within QRS-T
+                    // Q wave
+                    if (qp >= 0 && qp < 0.02) baseValue = pWave + (-Math.sin((qp / 0.02) * Math.PI) * 0.8);
+                    // R wave up
+                    else if (qp >= 0.02 && qp < 0.04) baseValue = pWave + ((qp - 0.02) / 0.02) * 10;
+                    // R wave down into S
+                    else if (qp >= 0.04 && qp < 0.06) baseValue = pWave + 10 - ((qp - 0.04) / 0.02) * 12;
+                    // S wave recovery
+                    else if (qp >= 0.06 && qp < 0.09) baseValue = pWave + (-2 + ((qp - 0.06) / 0.03) * 2);
+                    // ST segment
+                    else if (qp >= 0.09 && qp < 0.15) baseValue = 0;
+                    // T wave
+                    else if (qp >= 0.15 && qp < 0.30) baseValue = Math.sin(((qp - 0.15) / 0.15) * Math.PI) * 2.2;
+                    else baseValue = 0;
+                }
+            }
+            break;
+        }
+
+        // 2nd Degree Type II (Mobitz) — constant PR, intermittent dropped QRS
+        // 3-beat cycle: beats 0,1 conduct normally; beat 2 is P-wave only
+        case 'avb2_type2': {
+            var m2p = phase % 1;
+            var mobitzBeat = ectopicBeatNumber % 3;
+
+            // P wave always present at same position
+            var pWaveM2 = 0;
+            if (m2p >= 0.08 && m2p < 0.18) pWaveM2 = Math.sin(((m2p - 0.08) / 0.10) * Math.PI) * 1.5;
+
+            if (mobitzBeat === 2) {
+                // Dropped beat — P wave only, flat after
+                baseValue = pWaveM2 + (Math.random() - 0.5) * 0.05;
+            } else {
+                // Conducted beat — constant PR interval, then QRS-T
+                if (m2p < 0.28) {
+                    baseValue = pWaveM2;
+                } else {
+                    // Q wave
+                    if (m2p >= 0.28 && m2p < 0.30) baseValue = -Math.sin(((m2p - 0.28) / 0.02) * Math.PI) * 0.8;
+                    // R wave up
+                    else if (m2p >= 0.30 && m2p < 0.32) baseValue = ((m2p - 0.30) / 0.02) * 10;
+                    // R wave down into S
+                    else if (m2p >= 0.32 && m2p < 0.34) baseValue = 10 - ((m2p - 0.32) / 0.02) * 12;
+                    // S recovery
+                    else if (m2p >= 0.34 && m2p < 0.37) baseValue = -2 + ((m2p - 0.34) / 0.03) * 2;
+                    // ST segment
+                    else if (m2p >= 0.37 && m2p < 0.45) baseValue = 0;
+                    // T wave
+                    else if (m2p >= 0.45 && m2p < 0.60) baseValue = Math.sin(((m2p - 0.45) / 0.15) * Math.PI) * 2.2;
+                    else baseValue = 0;
+                }
+            }
+            break;
+        }
+
+        // 3rd Degree (Complete) Heart Block — full AV dissociation
+        // Two independent oscillators: atrial P waves at ~2x ventricular rate
+        // Ventricular escape has wide QRS (ventricular origin)
+        case 'avb3': {
+            var v3p = phase % 1; // ventricular phase (tied to HR setting)
+            
+            // Atrial oscillator runs independently at ~2.2x ventricular rate
+            // The 0.37 offset ensures P waves drift through different positions
+            var atrialRate = 2.2;
+            var atrialPhase1 = ((phase * atrialRate) + 0.0) % 1;
+            var atrialPhase2 = ((phase * atrialRate) + 0.5) % 1;
+            
+            // P waves — two per ventricular cycle, marching independently
+            var pWaveSum = 0;
+            if (atrialPhase1 >= 0.0 && atrialPhase1 < 0.14)
+                pWaveSum += Math.sin((atrialPhase1 / 0.14) * Math.PI) * 1.3;
+            if (atrialPhase2 >= 0.0 && atrialPhase2 < 0.14)
+                pWaveSum += Math.sin((atrialPhase2 / 0.14) * Math.PI) * 1.3;
+            
+            // Ventricular escape complex — wide QRS, no relationship to P waves
+            var qrsValue = 0;
+            // Wide Q
+            if (v3p >= 0.28 && v3p < 0.32) qrsValue = -((v3p - 0.28) / 0.04) * 3;
+            // Wide R wave up
+            else if (v3p >= 0.32 && v3p < 0.37) qrsValue = -3 + ((v3p - 0.32) / 0.05) * 15;
+            // R wave down into deep S
+            else if (v3p >= 0.37 && v3p < 0.43) qrsValue = 12 - ((v3p - 0.37) / 0.06) * 18;
+            // S wave recovery (slow, wide)
+            else if (v3p >= 0.43 && v3p < 0.50) qrsValue = -6 + ((v3p - 0.43) / 0.07) * 6;
+            // ST segment
+            else if (v3p >= 0.50 && v3p < 0.57) qrsValue = 0;
+            // Broad T wave
+            else if (v3p >= 0.57 && v3p < 0.75) qrsValue = Math.sin(((v3p - 0.57) / 0.18) * Math.PI) * 2.0;
+            
+            // Sum: P waves ride on top of whatever the ventricle is doing
+            baseValue = pWaveSum + qrsValue;
+            break;
+        }
+
+        // Junctional — retrograde P, narrow QRS, slow rate
+        case 'junctional': {
+            var jp = phase % 1;
+            if (jp >= 0.22 && jp < 0.28) baseValue = -Math.sin(((jp - 0.22) / 0.06) * Math.PI) * 0.8;
+            else if (jp >= 0.30 && jp < 0.32) baseValue = ((jp - 0.30) / 0.02) * 10;
+            else if (jp >= 0.32 && jp < 0.34) baseValue = 10 - ((jp - 0.32) / 0.02) * 12;
+            else if (jp >= 0.34 && jp < 0.37) baseValue = -2 + ((jp - 0.34) / 0.03) * 2;
+            else if (jp >= 0.37 && jp < 0.45) baseValue = 0;
+            else if (jp >= 0.45 && jp < 0.60) baseValue = Math.sin(((jp - 0.45) / 0.15) * Math.PI) * 2.2;
+            else baseValue = 0;
+            break;
+        }
+
+        // Idioventricular — wide QRS, no P waves, very slow
+        case 'idioventricular': {
+            var ip = phase % 1;
+            if (ip < 0.25) baseValue = (Math.random() - 0.5) * 0.1;
+            else if (ip >= 0.25 && ip < 0.30) baseValue = -((ip - 0.25) / 0.05) * 5;
+            else if (ip >= 0.30 && ip < 0.36) baseValue = -5 + ((ip - 0.30) / 0.06) * 17;
+            else if (ip >= 0.36 && ip < 0.44) baseValue = 12 - ((ip - 0.36) / 0.08) * 18;
+            else if (ip >= 0.44 && ip < 0.50) baseValue = -6 + ((ip - 0.44) / 0.06) * 6;
+            else if (ip >= 0.55 && ip < 0.75) baseValue = -Math.sin(((ip - 0.55) / 0.20) * Math.PI) * 2.0;
+            else baseValue = (Math.random() - 0.5) * 0.1;
+            break;
+        }
+
+        // Agonal — very slow, wide, irregular, dying heart
+        case 'agonal': {
+            var ap = phase % 1;
+            if (ap < 0.30) baseValue = (Math.random() - 0.5) * 0.2;
+            else if (ap >= 0.30 && ap < 0.38) baseValue = ((ap - 0.30) / 0.08) * 6;
+            else if (ap >= 0.38 && ap < 0.48) baseValue = 6 - ((ap - 0.38) / 0.10) * 12;
+            else if (ap >= 0.48 && ap < 0.55) baseValue = -6 + ((ap - 0.48) / 0.07) * 6;
+            else if (ap >= 0.55 && ap < 0.80) baseValue = (Math.random() - 0.5) * 0.3 - Math.sin(((ap - 0.55) / 0.25) * Math.PI) * 1.0;
+            else baseValue = (Math.random() - 0.5) * 0.2;
+            break;
+        }
+
+        // NSR (default) — with ectopic beat support
+        default: {
+            var p = phase % 1;
+            if (ectopicEnabled && ectopicInProgress) {
+                baseValue = getPVCComplex(p);
+            } else {
+                baseValue = getNormalComplex(p);
+            }
+        }
+    }
+    return baseValue + cprArtifact;
+}
+
+function getPlethPoint(phase, respPhaseVal, artifactType) {
+    var p = phase % 1;
+    var respMod = 1.0 + Math.sin(respPhaseVal * Math.PI * 2) * 0.12;
+    if (isCPRActive) {
+        return getCPRArtifact(phase) * 0.8 + (Math.random() - 0.5) * 2;
+    }
+    if (artifactType === 'noise') return (Math.random() - 0.5) * 8;
+    if (artifactType === 'motion') return (Math.sin(phase * 15) * 6) + getPlethPoint(phase, respPhaseVal, 'normal');
+    if (artifactType === 'low_perfusion') return getPlethPoint(phase, respPhaseVal, 'normal') * 0.3;
+    var sat = Math.max(60, Math.min(100, current.spo2));
+    var satScale = (sat - 60) / 40;
+    var finalAmp = 0.2 + (0.8 * satScale);
+    var t1 = 0.13, w1 = 0.12;
+    var systolic = Math.exp(-Math.pow(p - t1, 2) / (2 * w1 * w1));
+    var t2 = 0.42, w2 = 0.22;
+    var dicrotic = 0.35 * Math.exp(-Math.pow(p - t2, 2) / (2 * w2 * w2));
+    return -8.5 * (systolic + dicrotic) * respMod * finalAmp;
+}
+
+function getRespPoint(phase, respRate) {
+    var p = phase % 1;
+    var breathPortion = Math.min(1.0, (respRate / 15) * 0.6);
+    if (p > breathPortion) return 0;
+    var bp = p / breathPortion;
+    if (bp < 0.4) return -Math.sin((bp / 0.4) * Math.PI / 2) * 0.9;
+    if (bp < 0.45) return -0.9;
+    if (bp < 0.95) return -0.9 * Math.cos(((bp - 0.45) / 0.50) * Math.PI / 2);
+    return 0;
+}
+
+function getAbpPoint(phase, sys, dia) {
+    if (isCPRActive) {
+        var cprPhase = (phase * 2) % 1;
+        return Math.sin(cprPhase * Math.PI * 2) * 0.3 + (Math.random() - 0.5) * 0.1;
+    }
+    var p = phase % 1;
+    var pp = sys - dia;
+    var map = dia + (pp / 3);
+    var nSys = (sys - map) / 40;
+    var nDia = (dia - map) / 40;
+    if (p < 0.05) return nDia + (nSys - nDia) * (p / 0.05);
+    if (p < 0.10) return nSys - (nSys - nDia) * 0.15 * ((p - 0.05) / 0.05);
+    if (p < 0.20) return nSys * 0.85 - ((p - 0.10) / 0.10) * (nSys * 0.85 - nDia * 0.3);
+    if (p < 0.25) return nDia * 0.3 + Math.sin(((p - 0.20) / 0.05) * Math.PI) * 0.15;
+    if (p < 0.95) { var t = (p - 0.25) / 0.70; return (nDia * 0.3 + 0.15) * Math.exp(-t * 2) + nDia * (1 - Math.exp(-t * 2)); }
+    return nDia;
+}
+
+function getEtco2Point(phase, etco2Value) {
+    var p = phase % 1;
+    var amp = etco2Value / 35;
+    if (p < 0.15) return 0;
+    if (p < 0.22) { var t = (p - 0.15) / 0.07; return (t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2) * amp; }
+    if (p < 0.70) return amp + ((p - 0.22) / 0.48) * 0.05 * amp;
+    if (p < 0.77) { var t = (p - 0.70) / 0.07; return (amp + 0.05 * amp) * (1 - (t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2)); }
+    return 0;
+}
+
+// ==================== ANIMATION LOOP ====================
+var lastBeepTime = 0, lastAlarmTime = 0;
+
+function animate(currentTime) {
+    currentTime = currentTime || 0;
+    if (!isPaused) { updateTransitions(); }
+    updateDisplayedValues();
+    if (isPaused || resetPending) { requestAnimationFrame(animate); return; }
+    
+    var hrRate = Math.max(1, current.hr);
+    var respRate = Math.max(1, current.resp);
+    var canvasWidth = ecgCtx ? ecgCtx.canvas.width : 800;
+    var respCanvasWidth = respCtx ? respCtx.canvas.width : 800;
+    var pixelsPerSecond = SWEEP_SPEEDS.cardiac * 60;
+    var respPixelsPerSecond = SWEEP_SPEEDS.resp * 60;
+    var beatDurationPixels = pixelsPerSecond / (hrRate / 60);
+    var breathDurationPixels = respPixelsPerSecond / (respRate / 60);
+    
+    var newCardiacX = cardiacX + SWEEP_SPEEDS.cardiac;
+    var newRespX = respX + SWEEP_SPEEDS.resp;
+    var cardiacWrapped = newCardiacX >= canvasWidth;
+    var respWrapped = newRespX >= respCanvasWidth;
+    var wrappedCardiacX = newCardiacX % canvasWidth;
+    var wrappedRespX = newRespX % respCanvasWidth;
+    // Track ectopic beats by detecting phase wrap-around (new beat start)
+    var currentBeatPhase = (wrappedCardiacX % beatDurationPixels) / beatDurationPixels;
+    // Detect new beat (phase wrapped around)
+    if (currentBeatPhase < prevBeatPhase) {
+        ectopicBeatNumber++;
+        
+        // Ectopic beat logic (only when enabled)
+        if (ectopicEnabled) {
+            nextEctopicIn--;
+            if (nextEctopicIn <= 0) {
+            ectopicInProgress = true;
+            randomisePVC();
+            scheduleNextEctopic();
+            } else {
+                ectopicInProgress = false;
+            }
+        } else {
+            ectopicInProgress = false;
+        }
+    }
+    prevBeatPhase = currentBeatPhase;
+    var shockArtifactValue = 0;
+    if (shockActive) { shockArtifactValue = getShockArtifact(currentTime - shockStartTime); }
+    
+    // ECG
+    if (ecgCtx && states.hr_on) {
+        var h = ecgCtx.canvas.height, w = ecgCtx.canvas.width;
+        ecgCtx.clearRect(wrappedCardiacX, 0, 25, h);
+        if (cardiacWrapped) { ecgCtx.clearRect(0, 0, 25, h); lastEcgY = h / 2; }
+        if (!cardiacWrapped) {
+            var numSamples = Math.max(3, Math.ceil(SWEEP_SPEEDS.cardiac * 2));
+            var xStep = SWEEP_SPEEDS.cardiac / numSamples;
+            var prevX = cardiacX, prevY = lastEcgY;
+            for (var i = 1; i <= numSamples; i++) {
+                var sampleX = cardiacX + (xStep * i);
+                var phaseInBeat = ((sampleX % beatDurationPixels) / beatDurationPixels);
+                var ecgValue = getEcgPoint(phaseInBeat, rhythm) + shockArtifactValue;
+                var y = (h / 2) - (ecgValue * (h * 0.035));
+                ecgCtx.beginPath();
+                ecgCtx.strokeStyle = '#30d158';
+                ecgCtx.lineWidth = 2.5;
+                ecgCtx.lineCap = 'round';
+                ecgCtx.moveTo(prevX, prevY);
+                ecgCtx.lineTo(sampleX, y);
+                ecgCtx.stroke();
+                prevX = sampleX; prevY = y;
+            }
+            lastEcgY = prevY;
+        }
+        var oldPhase = (cardiacX % beatDurationPixels) / beatDurationPixels;
+        var newPhase = (wrappedCardiacX % beatDurationPixels) / beatDurationPixels;
+        if ((oldPhase > 0.5 && newPhase < 0.5) || (oldPhase < 0.32 && newPhase >= 0.32)) {
+            if (currentTime - lastBeepTime > (60000 / hrRate) * 0.7) {
+                playHeartbeatBeep();
+                lastBeepTime = currentTime;
+            }
+        }
+    }
+    
+    // PLETH
+    if (spo2Ctx && states.spo2_on) {
+        var h = spo2Ctx.canvas.height, w = spo2Ctx.canvas.width;
+        spo2Ctx.clearRect(wrappedCardiacX, 0, 25, h);
+        if (cardiacWrapped) { spo2Ctx.clearRect(0, 0, 25, h); lastSpo2Y = h * 0.7; }
+        if (!cardiacWrapped) {
+            var numSamples = Math.max(3, Math.ceil(SWEEP_SPEEDS.cardiac * 2));
+            var xStep = SWEEP_SPEEDS.cardiac / numSamples;
+            var prevX = cardiacX, prevY = lastSpo2Y;
+            for (var i = 1; i <= numSamples; i++) {
+                var sampleX = cardiacX + (xStep * i);
+                var phaseInBeat = ((sampleX % beatDurationPixels) / beatDurationPixels);
+                var respPhaseForPleth = ((sampleX % breathDurationPixels) / breathDurationPixels);
+                var plethValue = getPlethPoint(phaseInBeat, respPhaseForPleth, artifact) + shockArtifactValue * 0.5;
+                var y = (h * 0.7) + (plethValue * (h * 0.05));
+                spo2Ctx.beginPath();
+                spo2Ctx.strokeStyle = plethColorBlue ? '#64d2ff' : '#ffd60a';
+                spo2Ctx.lineWidth = 2.5;
+                spo2Ctx.lineCap = 'round';
+                spo2Ctx.moveTo(prevX, prevY);
+                spo2Ctx.lineTo(sampleX, y);
+                spo2Ctx.stroke();
+                prevX = sampleX; prevY = y;
+            }
+            lastSpo2Y = prevY;
+        }
+    }
+    
+    // ABP
+    if (abpCtx && states.abp_on) {
+        var h = abpCtx.canvas.height, w = abpCtx.canvas.width;
+        abpCtx.clearRect(wrappedCardiacX, 0, 25, h);
+        if (cardiacWrapped) { abpCtx.clearRect(0, 0, 25, h); lastAbpY = h * 0.5; }
+        if (!cardiacWrapped) {
+            var numSamples = Math.max(3, Math.ceil(SWEEP_SPEEDS.cardiac * 2));
+            var xStep = SWEEP_SPEEDS.cardiac / numSamples;
+            var scale = Math.max(0.3, Math.min(1.5, (current.abp_sys - current.abp_dia) / 50));
+            var prevX = cardiacX, prevY = lastAbpY;
+            for (var i = 1; i <= numSamples; i++) {
+                var sampleX = cardiacX + (xStep * i);
+                var phaseInBeat = ((sampleX % beatDurationPixels) / beatDurationPixels);
+                var abpValue = getAbpPoint(phaseInBeat, current.abp_sys, current.abp_dia) + shockArtifactValue * 0.3;
+                var y = (h * 0.5) - (abpValue * (h * 0.35) * scale);
+                abpCtx.beginPath();
+                abpCtx.strokeStyle = '#ff453a';
+                abpCtx.lineWidth = 2.5;
+                abpCtx.lineCap = 'round';
+                abpCtx.moveTo(prevX, prevY);
+                abpCtx.lineTo(sampleX, y);
+                abpCtx.stroke();
+                prevX = sampleX; prevY = y;
+            }
+            lastAbpY = prevY;
+        }
+    }
+    
+    cardiacX = wrappedCardiacX;
+    
+    // RESP
+    if (respCtx && states.resp_on) {
+        var h = respCtx.canvas.height, w = respCtx.canvas.width;
+        respCtx.clearRect(wrappedRespX, 0, 25, h);
+        if (respWrapped) { respCtx.clearRect(0, 0, 25, h); lastRespY = h * 0.5; }
+        if (!respWrapped) {
+            var phaseInBreath = (respX % breathDurationPixels) / breathDurationPixels;
+            var y = (h * 0.5) + (getRespPoint(phaseInBreath, current.resp) * (h * 0.35));
+            respCtx.beginPath();
+            respCtx.strokeStyle = '#8e8e93';
+            respCtx.lineWidth = 2.5;
+            respCtx.lineCap = 'round';
+            respCtx.moveTo(respX, lastRespY);
+            respCtx.lineTo(newRespX, y);
+            respCtx.stroke();
+            lastRespY = y;
+        }
+    }
+    
+    // EtCO2
+    if (etco2Ctx && states.etco2_on) {
+        var h = etco2Ctx.canvas.height, w = etco2Ctx.canvas.width;
+        var baseline = h * 0.85;
+        etco2Ctx.clearRect(wrappedRespX, 0, 25, h);
+        if (respWrapped) { etco2Ctx.clearRect(0, 0, 25, h); lastEtco2Y = baseline; }
+        if (!respWrapped) {
+            var phaseInBreath = (respX % breathDurationPixels) / breathDurationPixels;
+            var displayScale = h * 0.6;
+            if (current.etco2 > 50) displayScale = displayScale * (50 / current.etco2);
+            var y = baseline - (getEtco2Point(phaseInBreath, current.etco2) * displayScale);
+            etco2Ctx.fillStyle = 'rgba(142, 142, 147, 0.25)';
+            etco2Ctx.beginPath();
+            etco2Ctx.moveTo(respX, baseline);
+            etco2Ctx.lineTo(respX, lastEtco2Y);
+            etco2Ctx.lineTo(newRespX, y);
+            etco2Ctx.lineTo(newRespX, baseline);
+            etco2Ctx.closePath();
+            etco2Ctx.fill();
+            etco2Ctx.beginPath();
+            etco2Ctx.strokeStyle = '#8e8e93';
+            etco2Ctx.lineWidth = 2.5;
+            etco2Ctx.moveTo(respX, lastEtco2Y);
+            etco2Ctx.lineTo(newRespX, y);
+            etco2Ctx.stroke();
+            lastEtco2Y = y;
+        }
+        document.getElementById('etco2_limits').innerHTML = Math.max(50, Math.ceil(current.etco2 / 10) * 10 + 10) + '<br>0';
+    }
+    
+    respX = wrappedRespX;
+    
+    var anyAlarm = false;
+    for (var k in alarmState) { if (alarmState[k]) anyAlarm = true; }
+    var priority = getAlarmPriority();
+    var repeatInterval = (priority === 'high') ? 3000 : 5000;
+    if (anyAlarm && !alarmsSilenced && alarmVolume > 0 && currentTime - lastAlarmTime > repeatInterval) {
+        playAlarmTone();
+        lastAlarmTime = currentTime;
+    }
+    
+    if (states.abp_on) {
+        document.getElementById('abp_map').innerText = '(' + Math.round(current.abp_dia + (current.abp_sys - current.abp_dia) / 3) + ')';
+    }
+    
+    document.getElementById('block_spo2').style.borderLeftWidth = (states.spo2_on && current.spo2 < 90) ? '6px' : '4px';
+    
+    requestAnimationFrame(animate);
+}
+
+// ==================== BUTTON FUNCTIONS ====================
+var alarmPauseCountdown = 0;
+var alarmPauseInterval = null;
+
+function toggleAlarmSilence() {
+    alarmsSilenced = !alarmsSilenced;
+    var btn = document.getElementById('btn_silence');
+    var indicator = document.getElementById('alarm_paused_indicator');
+    var countdownEl = document.getElementById('alarm_pause_countdown');
+    
+    if (alarmsSilenced) {
+        btn.classList.add('active');
+        indicator.classList.add('active');
+        alarmPauseCountdown = 120;
+        updateAlarmPauseDisplay();
+        if (alarmPauseInterval) clearInterval(alarmPauseInterval);
+        alarmPauseInterval = setInterval(function() {
+            alarmPauseCountdown--;
+            updateAlarmPauseDisplay();
+            if (alarmPauseCountdown <= 0) {
+                alarmsSilenced = false;
+                btn.classList.remove('active');
+                indicator.classList.remove('active');
+                clearInterval(alarmPauseInterval);
+                alarmPauseInterval = null;
+            }
+        }, 1000);
+    } else {
+        btn.classList.remove('active');
+        indicator.classList.remove('active');
+        if (alarmPauseInterval) { clearInterval(alarmPauseInterval); alarmPauseInterval = null; }
+    }
+}
+
+function updateAlarmPauseDisplay() {
+    var mins = Math.floor(alarmPauseCountdown / 60);
+    var secs = alarmPauseCountdown % 60;
+    document.getElementById('alarm_pause_countdown').innerText = mins + ':' + (secs < 10 ? '0' : '') + secs;
+}
+
+function showAlarmSettings() {
+    var l = alarmLimits[patientType];
+    alert('Alarm Settings (' + l.label + '):\n\nHR: ' + l.hr_low + '-' + l.hr_high + ' bpm\nSpO2: >' + l.spo2_low + '%\nRR: ' + l.resp_low + '-' + l.resp_high + ' brpm\nTemp: ' + l.temp_low.toFixed(1) + '-' + l.temp_high.toFixed(1) + '°C');
+}
+
+function triggerNIBP() {
+    if (nibpCycling || !states.nibp_on) return;
+    nibpCycling = true;
+    document.getElementById('btn_nibp').classList.add('active');
+    document.getElementById('btn_nibp').classList.remove('has-pending');
+    var indicator = document.createElement('div');
+    indicator.className = 'nibp-cycling';
+    indicator.id = 'nibp_indicator';
+    indicator.innerText = 'NIBP CYCLING...';
+    document.querySelector('.monitor-grid').appendChild(indicator);
+    var countdown = 8;
+    var interval = setInterval(function() { if (--countdown > 0) indicator.innerText = 'NIBP CYCLING... ' + countdown + 's'; }, 1000);
+    setTimeout(function() {
+        clearInterval(interval);
+        nibpCycling = false;
+        document.getElementById('btn_nibp').classList.remove('active');
+        indicator.remove();
+        displayedNIBP.sys = Math.round(pendingNIBP.sys);
+        displayedNIBP.dia = Math.round(pendingNIBP.dia);
+        displayedNIBP.hasReading = true;
+        pendingNIBP.hasPending = false;
+    }, 8000);
+}
+
+// ==================== VOLUME CONTROLS ====================
+function toggleVolumeBar(type) {
+    var bar = document.getElementById('volume_control_bar');
+    var label = document.getElementById('vol_bar_label');
+    var qrsBtn = document.getElementById('btn_qrs_vol');
+    var alarmBtn = document.getElementById('btn_alarm_vol');
+    if (activeVolumeBar === type) {
+        bar.classList.remove('active');
+        qrsBtn.classList.remove('active');
+        alarmBtn.classList.remove('active');
+        activeVolumeBar = null;
+    } else {
+        activeVolumeBar = type;
+        bar.classList.add('active');
+        if (type === 'qrs') {
+            label.innerText = 'QRS VOLUME';
+            label.style.color = 'var(--ecg-color)';
+            qrsBtn.classList.add('active');
+            alarmBtn.classList.remove('active');
+            updateVolumeButtons(Math.round(qrsVolume * 10), false);
+        } else {
+            label.innerText = 'ALARM VOLUME';
+            label.style.color = 'var(--alarm-yellow)';
+            alarmBtn.classList.add('active');
+            qrsBtn.classList.remove('active');
+            updateVolumeButtons(Math.round(alarmVolume * 10), true);
+        }
+    }
+}
+
+function setVolume(level) {
+    var volume = level / 10;
+    if (activeVolumeBar === 'qrs') {
+        qrsVolume = volume;
+        updateVolumeButtons(level, false);
+    } else if (activeVolumeBar === 'alarm') {
+        alarmVolume = volume;
+        updateVolumeButtons(level, true);
+    }
+}
+
+function updateVolumeButtons(selectedLevel, isAlarm) {
+    var buttons = document.querySelectorAll('.vol-btn');
+    buttons.forEach(function(btn, index) {
+        btn.classList.remove('selected', 'alarm-vol');
+        if (index === selectedLevel) {
+            btn.classList.add('selected');
+            if (isAlarm) btn.classList.add('alarm-vol');
+        }
+    });
+}
+
+// ==================== FULLSCREEN ====================
+function toggleFullscreen() {
+    var isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+    if (isFullscreen) {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        else if (document.msExitFullscreen) document.msExitFullscreen();
+    } else {
+        var elem = document.documentElement;
+        if (elem.requestFullscreen) elem.requestFullscreen();
+        else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+        else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+    }
+}
+
+function updateFullscreenButton() {
+    var btn = document.getElementById('fullscreen_btn');
+    var isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+    btn.innerText = isFullscreen ? 'EXIT FS' : 'FULLSCREEN';
+}
+
+document.addEventListener('fullscreenchange', updateFullscreenButton);
+document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+document.addEventListener('msfullscreenchange', updateFullscreenButton);
+
+function showMenu() { alert('Menu:\n\n• Alarm Settings\n• Display Setup\n• Trend Review\n• Patient Data\n• System Settings'); }
+
+// ==================== POWER/STARTUP ====================
+var isPoweredOn = false;
+function startPowerOn() {
+    if (isPoweredOn) return;
+    var btn = document.getElementById('power_btn');
+    var label = document.getElementById('power_label');
+    var text = document.getElementById('startup_text');
+    var prog = document.getElementById('startup_progress');
+    var bar = document.getElementById('startup_bar');
+    toggleFullscreen();
+    btn.classList.add('active');
+    label.classList.add('active');
+    label.innerText = 'POWERING ON';
+    setTimeout(function() {
+        text.classList.add('visible');
+        prog.classList.add('visible');
+        var p = 0;
+        var interval = setInterval(function() {
+            p += 2;
+            bar.style.width = p + '%';
+            if (p === 20) text.innerText = 'LOADING MODULES...';
+            if (p === 40) text.innerText = 'CALIBRATING SENSORS...';
+            if (p === 60) text.innerText = 'INITIALIZING DISPLAY...';
+            if (p === 80) text.innerText = 'CONNECTING TO CONTROLLER...';
+            if (p === 100) {
+                clearInterval(interval);
+                text.innerText = 'READY';
+                setTimeout(function() {
+                    document.getElementById('power_overlay').classList.add('hidden');
+                    isPoweredOn = true;
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                }, 500);
+            }
+        }, 50);
+    }, 300);
+}
+
+// ==================== PATIENT TYPE ====================
+var patientType = 'adult';
+var alarmLimits = {
+    adult: { hr_high: 120, hr_low: 60, spo2_low: 92, resp_high: 20, resp_low: 10, temp_high: 38.0, temp_low: 35.0, abp_sys_high: 160, abp_sys_low: 80, etco2_high: 50, etco2_low: 30, label: 'ADULT' },
+    child: { hr_high: 140, hr_low: 70, spo2_low: 94, resp_high: 30, resp_low: 18, temp_high: 38.0, temp_low: 36.0, abp_sys_high: 140, abp_sys_low: 70, etco2_high: 50, etco2_low: 30, label: 'CHILD' },
+    infant: { hr_high: 180, hr_low: 100, spo2_low: 94, resp_high: 50, resp_low: 25, temp_high: 37.5, temp_low: 36.5, abp_sys_high: 120, abp_sys_low: 60, etco2_high: 45, etco2_low: 30, label: 'INFANT' }
+};
+
+function openPatientOverlay() { document.getElementById('patient_overlay').classList.add('active'); }
+function closePatientOverlay() { document.getElementById('patient_overlay').classList.remove('active'); }
+function selectPatientType(type) {
+    patientType = type;
+    var l = alarmLimits[type];
+    document.querySelectorAll('.patient-option').forEach(function(el) { el.classList.remove('selected'); });
+    document.getElementById('opt_' + type).classList.add('selected');
+    document.getElementById('patient_display').innerText = 'PATIENT: ' + l.label + ' ▼';
+    document.getElementById('hr_limits').innerHTML = l.hr_high + '<br>' + l.hr_low;
+    document.getElementById('spo2_limits').innerHTML = '100<br>' + l.spo2_low;
+    document.getElementById('resp_limits').innerHTML = l.resp_high + '<br>' + l.resp_low;
+    document.getElementById('temp_limits').innerHTML = l.temp_high.toFixed(1) + '<br>' + l.temp_low.toFixed(1);
+}
+
+// ==================== INIT ====================
+window.onload = function() {
+    initCanvases();
+    updateClock();
+    updateDisplayedValues();
+    animate();
+    setTimeout(function() { document.getElementById('pleth_color_hint').style.opacity = '0'; }, 5000);
+};
+</script>
+</body>
+</html>

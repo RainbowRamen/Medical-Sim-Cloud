@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SimControl - Advanced Mode</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root { --bg: #000; --card: #1c1c1e; --accent: #0a84ff; --green: #30d158; --yellow: #ffd60a; --red: #ff453a; --purple: #bf5af2; --grey: #8e8e93; --cyan: #64d2ff; --orange: #ff9500; --m-green: rgba(48, 209, 88, 0.2); --m-yellow: rgba(255, 214, 10, 0.2); --m-red: rgba(255, 69, 58, 0.2); --m-purple: rgba(191, 90, 242, 0.2); --m-grey: rgba(142, 142, 147, 0.2); --m-cyan: rgba(100, 210, 255, 0.2); --m-orange: rgba(255, 149, 0, 0.2); --dock-h: 60px; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: white; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .header { background: rgba(28, 28, 30, 0.8); backdrop-filter: blur(15px); padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; border-bottom: 0.5px solid #333; }
+        .scroll-area { padding: 8px; overflow-y: auto; flex-grow: 1; gap: 8px; display: grid; padding-bottom: 10px; grid-template-columns: 1fr; }
+        .card { min-height: 0; }
+        @media (min-width: 600px) { 
+            .scroll-area { grid-template-columns: repeat(2, 1fr); } 
+            .card.full-width { grid-column: 1 / -1; } 
+        }
+        @media (min-width: 900px) { 
+            .scroll-area { grid-template-columns: repeat(3, 1fr); } 
+        }
+        @media (min-width: 1200px) { 
+            .scroll-area { grid-template-columns: repeat(4, 1fr); } 
+        }
+        /* Fill vertical space and let last-row cards stretch */
+        .scroll-area { align-content: start; }
+        @media (min-height: 600px) {
+            .scroll-area { overflow-y: hidden; align-content: stretch; }
+        }
+        .card { background: var(--card); border-radius: 12px; padding: 12px; border: 0.5px solid #333; display: flex; flex-direction: column; }
+        .val-display { font-size: 2rem; font-weight: 800; line-height: 1; cursor: pointer; }
+        .val-display:active { opacity: 0.5; }
+        .dimmed { opacity: 0.15 !important; filter: grayscale(1); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .param-title { font-weight: 800; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; }
+        .unit { font-size: 0.7rem; color: var(--grey); margin-left: 4px; }
+        .control-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+        .fine-btn { background: #2c2c2e; border: 1px solid #444; color: white; width: 38px; height: 38px; border-radius: 10px; font-size: 1.1rem; font-weight: 600; flex-shrink: 0; }
+        .fine-btn:active { background: #3a3a3c; }
+        .btn-send { width: 100%; border: none; color: white; padding: 10px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; margin-top: auto; letter-spacing: 1px; }
+        .btn-send:active { filter: brightness(1.5); }
+        .btn-send:disabled { opacity: 0.3; }
+        .btn-send.live-disabled { background: #333 !important; color: #666 !important; }
+        .btn-hr { background: var(--m-green); color: var(--green); }
+        .btn-spo2 { background: var(--m-yellow); color: var(--yellow); }
+        .btn-resp { background: var(--m-grey); color: var(--grey); }
+        .btn-bp { background: var(--m-red); color: var(--red); }
+        .btn-temp { background: var(--m-purple); color: var(--purple); }
+        .btn-etco2 { background: var(--m-cyan); color: var(--cyan); }
+        #header-qr { background: white; padding: 3px; border-radius: 4px; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+        #qr-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
+        #qrcode { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        #rhythm-overlay { position: fixed; bottom: -100%; left: 0; width: 100%; height: 70%; background: rgba(28, 28, 30, 0.98); backdrop-filter: blur(25px); z-index: 1000; border-radius: 20px 20px 0 0; transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1); padding: 20px; box-sizing: border-box; border-top: 1px solid #444; overflow-y: auto; }
+        #rhythm-overlay.active { bottom: var(--dock-h); }
+        .rhythm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .r-btn { background: #2c2c2e; border: none; padding: 15px; color: white; border-radius: 10px; font-weight: 600; font-size: 0.85rem; }
+        .r-btn:active { transform: scale(0.95); }
+        .r-btn.active { background: var(--green); color: black; }
+        .r-btn.queued { background: var(--m-yellow); border: 2px solid var(--yellow); color: var(--yellow); }
+        .r-btn.critical { border: 2px solid var(--red); }
+        .r-btn.critical.queued { background: var(--m-yellow); border-color: var(--yellow); }
+        .rhythm-info { background: #2c2c2e; padding: 12px; border-radius: 10px; margin-top: 10px; font-size: 0.8rem; line-height: 1.5; }
+        .rhythm-info strong { color: var(--yellow); display: block; margin-bottom: 4px; }
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider-toggle { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .3s; border-radius: 22px; }
+        .slider-toggle:before { position: absolute; content: ""; height: 18px; width: 18px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider-toggle { background-color: var(--green); }
+        input:checked + .slider-toggle:before { transform: translateX(18px); }
+        input[type=range] { flex-grow: 1; appearance: none; -webkit-appearance: none; height: 6px; border-radius: 3px; outline: none; }
+        input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 22px; height: 22px; background: white; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        .s-hr { background: var(--m-green) !important; }
+        .s-spo2 { background: var(--m-yellow) !important; }
+        .s-resp { background: var(--m-grey) !important; }
+        .s-bp { background: var(--m-red) !important; }
+        .s-temp { background: var(--m-purple) !important; }
+        .s-etco2 { background: var(--m-cyan) !important; }
+        .btn-open-rhythm { background: #2c2c2e; border: 1px solid #444; color: white; width: 100%; padding: 6px 10px; border-radius: 6px; font-weight: 600; font-size: 0.7rem; text-align: left; position: relative; }
+        .btn-open-rhythm::after { content: '▶'; position: absolute; right: 10px; color: var(--grey); font-size: 0.7rem; }
+        .btn-open-rhythm.has-queued { border-color: var(--yellow); }
+        .hidden { display: none !important; }
+        .header-btn { background: #2c2c2e; border: none; color: var(--accent); padding: 5px 8px; border-radius: 6px; font-size: 0.6rem; font-weight: 700; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); display: inline-block; margin-right: 4px; }
+        .status-online { background: var(--green); box-shadow: 0 0 8px var(--green); }
+        .artifact-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 8px; }
+        .artifact-btn { background: #2c2c2e; border: 1px solid #444; color: #888; padding: 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; }
+        .artifact-btn.active { background: var(--m-yellow); color: var(--yellow); border-color: var(--yellow); }
+        .sync-label { font-size: 0.6rem; color: var(--cyan); text-align: center; padding: 3px; background: var(--m-cyan); border-radius: 4px; margin-bottom: 6px; }
+        .queued-label { font-size: 0.6rem; margin-top: 4px; padding: 4px 6px; background: var(--m-yellow); border-radius: 4px; display: flex; align-items: center; gap: 4px; }
+        .queued-label span:last-child { color: white; font-weight: 600; }
+        .dock-btn.live-btn { background: var(--m-yellow); border-color: var(--yellow); color: var(--yellow); }
+        .dock-btn.live-btn.active { background: var(--m-cyan); border-color: var(--cyan); color: var(--cyan); animation: live-pulse 1.5s infinite; }
+        @keyframes live-pulse { 0%, 100% { box-shadow: 0 0 5px var(--cyan); } 50% { box-shadow: 0 0 15px var(--cyan); } }
+
+        /* Bottom Dock */
+        .bottom-dock { height: var(--dock-h); background: #0a0a0a; display: flex; padding: 6px; gap: 4px; border-top: 2px solid #222; flex-shrink: 0; }
+        .dock-btn { flex: 1; background: linear-gradient(180deg, #333 0%, #1a1a1a 100%); border: 1px solid #333; border-radius: 6px; color: #999; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s; min-width: 0; }
+        .dock-btn:active { background: linear-gradient(180deg, #444 0%, #222 100%); transform: scale(0.95); }
+        .dock-btn .icon { font-size: 1.1rem; }
+        .dock-btn .label { font-size: 0.5rem; font-weight: 700; margin-top: 2px; text-transform: uppercase; }
+        .dock-btn.active { background: var(--m-green); border-color: var(--green); color: var(--green); }
+        .dock-btn.pause-active { background: var(--m-yellow); border-color: var(--yellow); color: var(--yellow); }
+        .dock-btn.cpr-active { background: var(--m-red); border-color: var(--red); color: var(--red); animation: cpr-pulse 0.6s infinite; }
+        .dock-btn.shock-btn { color: var(--yellow); }
+        .dock-btn.shock-btn:active { background: var(--yellow); color: black; }
+        @keyframes cpr-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+        /* Overlays */
+        .overlay-panel { position: fixed; bottom: -100%; left: 50%; transform: translateX(-50%); width: 90%; max-width: 350px; background: #1c1c1e; border-radius: 16px 16px 0 0; padding: 16px; border: 1px solid #444; border-bottom: none; transition: bottom 0.3s ease; z-index: 900; }
+        .overlay-panel.active { bottom: var(--dock-h); }
+        .overlay-title { font-size: 0.8rem; font-weight: 800; color: var(--grey); margin-bottom: 12px; text-align: center; }
+        .timer-display { display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .timer-time { font-size: 2.5rem; font-weight: 900; font-family: monospace; color: var(--cyan); }
+        .timer-btn { background: #2c2c2e; border: 1px solid #444; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; }
+        .timer-btn:active { background: #444; }
+        .timer-btn.running { background: var(--m-green); border-color: var(--green); color: var(--green); }
+        .volume-display { display: flex; align-items: center; gap: 10px; }
+        .volume-display input[type=range] { flex: 1; }
+        .volume-val { font-size: 1rem; font-weight: 800; color: var(--orange); min-width: 45px; text-align: right; }
+
+        /* Trend System */
+        .trend-indicator { display: flex; align-items: center; gap: 6px; margin: 6px 0; padding: 4px 6px; background: var(--m-cyan); border-radius: 4px; }
+        .trend-bar { flex: 1; height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
+        .trend-progress { height: 100%; background: var(--cyan); width: 0%; transition: width 0.5s linear; }
+        .trend-cancel { background: none; border: none; color: var(--red); font-size: 0.8rem; font-weight: 800; padding: 2px 6px; cursor: pointer; }
+        .trend-cancel:active { opacity: 0.5; }
+        .card.trend-active { border-color: var(--cyan) !important; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div style="display:flex; align-items:center; gap:6px;">
+        <div id="header-qr" onclick="showQR()"></div>
+        <button class="header-btn" onclick="openMonitor()">MONITOR</button>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center;">
+        <div id="room_code" style="color: var(--accent); font-weight: 900; font-family: monospace; font-size: 0.95rem;">----</div>
+        <div style="font-size: 0.5rem; display: flex; align-items: center;">
+            <span id="status_dot" class="status-dot"></span>
+            <span id="status_text" style="color: var(--grey);">OFFLINE</span>
+        </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:5px;">
+        <button class="header-btn" onclick="resetSim()" style="color: var(--red);">RESET</button>
+    </div>
+</div>
+
+<div class="scroll-area">
+    <!-- HR Card with Rhythm -->
+    <div class="card" id="card_hr" style="border-left: 4px solid var(--green);">
+        <div class="card-header"><div class="param-title" style="color: var(--green);">HR <label class="switch"><input type="checkbox" id="hr_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display" id="hr_val" style="color: var(--green);" onclick="toggleInput('hr_on')">60<span class="unit">BPM</span></div>
+        <div class="control-row">
+            <button class="fine-btn" onclick="adjust('hr_s', -1)">−</button>
+            <input type="range" id="hr_s" class="s-hr" min="0" max="220" value="60" oninput="handleChange()">
+            <button class="fine-btn" onclick="adjust('hr_s', 1)">+</button>
+        </div>
+        <div style="margin: 6px 0;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="color: var(--grey); font-size: 0.55rem; font-weight: 700;">RHYTHM</span>
+                <button class="btn-open-rhythm" onclick="toggleRhythmOverlay()" id="current_rhythm_display">NSR</button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                <span style="color: var(--grey); font-size: 0.55rem; font-weight: 700;">ECTOPIC</span>
+                <label class="switch"><input type="checkbox" id="ectopic_on" onchange="toggleEctopic()"><span class="slider-toggle"></span></label>
+                <span id="ectopic_status" style="font-size: 0.55rem; color: #666;">OFF</span>
+            </div>
+            <div id="ectopic_freq_row" style="display: none; margin-top: 6px;">
+                <div style="display: flex; gap: 4px;">
+                    <button class="artifact-btn" id="ect_low" onclick="setEctopicFreq('low')" style="flex:1; padding:6px; font-size:0.6rem;">LOW</button>
+                    <button class="artifact-btn active" id="ect_medium" onclick="setEctopicFreq('medium')" style="flex:1; padding:6px; font-size:0.6rem;">MEDIUM</button>
+                    <button class="artifact-btn" id="ect_frequent" onclick="setEctopicFreq('frequent')" style="flex:1; padding:6px; font-size:0.6rem;">FREQUENT</button>
+                </div>
+            </div>
+            <div id="queued_rhythm_label" class="queued-label" style="display: none;">
+                <span style="color: var(--yellow);">⏳</span> <span id="queued_rhythm_name">--</span>
+            </div>
+        </div>
+        <div class="trend-indicator" id="trend_hr" style="display: none;">
+            <div class="trend-bar"><div class="trend-progress" id="trend_progress_hr"></div></div>
+            <button class="trend-cancel" onclick="cancelTrend('hr')">✕</button>
+        </div>
+        <button class="btn-send btn-hr" onclick="sendVitals()">UPDATE</button>
+    </div>
+
+    <!-- SpO2 Card -->
+    <div class="card" id="card_spo2" style="border-left: 4px solid var(--yellow);">
+        <div class="card-header"><div class="param-title" style="color: var(--yellow);">SpO2 <label class="switch"><input type="checkbox" id="spo2_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display" id="spo2_val" style="color: var(--yellow);" onclick="toggleInput('spo2_on')">98<span class="unit">%</span></div>
+        <div class="control-row">
+            <button class="fine-btn" onclick="adjust('spo2_s', -1)">−</button>
+            <input type="range" id="spo2_s" class="s-spo2" min="50" max="100" value="98" oninput="handleChange()">
+            <button class="fine-btn" onclick="adjust('spo2_s', 1)">+</button>
+        </div>
+        <div class="artifact-grid">
+            <button class="artifact-btn active" id="art_normal" onclick="setArtifact('normal')">Normal</button>
+            <button class="artifact-btn" id="art_lowperf" onclick="setArtifact('low_perfusion')">Low Perf</button>
+            <button class="artifact-btn" id="art_noise" onclick="setArtifact('noise')">Noise</button>
+            <button class="artifact-btn" id="art_motion" onclick="setArtifact('motion')">Motion</button>
+        </div>
+        <div class="trend-indicator" id="trend_spo2" style="display: none;">
+            <div class="trend-bar"><div class="trend-progress" id="trend_progress_spo2"></div></div>
+            <button class="trend-cancel" onclick="cancelTrend('spo2')">✕</button>
+        </div>
+        <button class="btn-send btn-spo2" onclick="sendVitals()">UPDATE</button>
+    </div>
+
+    <!-- RESP Card -->
+    <div class="card" id="card_resp" style="border-left: 4px solid var(--grey);">
+        <div class="card-header"><div class="param-title" style="color: var(--grey);">RESP <label class="switch"><input type="checkbox" id="resp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display" id="resp_val" style="color: var(--grey);" onclick="toggleInput('resp_on')">16<span class="unit">BRPM</span></div>
+        <div class="control-row">
+            <button class="fine-btn" onclick="adjust('resp_s', -1)">−</button>
+            <input type="range" id="resp_s" class="s-resp" min="0" max="60" value="16" oninput="handleChange()">
+            <button class="fine-btn" onclick="adjust('resp_s', 1)">+</button>
+        </div>
+        <div class="trend-indicator" id="trend_resp" style="display: none;">
+            <div class="trend-bar"><div class="trend-progress" id="trend_progress_resp"></div></div>
+            <button class="trend-cancel" onclick="cancelTrend('resp')">✕</button>
+        </div>
+        <button class="btn-send btn-resp" onclick="sendVitals()">UPDATE</button>
+    </div>
+
+    <!-- NIBP Card -->
+    <div class="card" id="card_nibp" style="border-left: 4px solid var(--red);">
+        <div class="card-header"><div class="param-title" style="color: var(--red);">NIBP <label class="switch"><input type="checkbox" id="nibp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="sync-label" id="bp_sync_label" style="display:none;">🔗 SYNCED WITH ABP</div>
+        <div class="val-display" id="nibp_val" style="color: var(--red);" onclick="toggleInput('nibp_on')">120/80<span class="unit">mmHg</span></div>
+        <div style="font-size: 0.55rem; color: var(--grey); margin: 3px 0;">SYS</div>
+        <div class="control-row">
+            <button class="fine-btn" onclick="adjustBP('sys', -5)">−</button>
+            <input type="range" id="sys_s" class="s-bp" min="0" max="250" value="120" oninput="handleBPChange()">
+            <button class="fine-btn" onclick="adjustBP('sys', 5)">+</button>
+        </div>
+        <div style="font-size: 0.55rem; color: var(--grey); margin: 3px 0;">DIA</div>
+        <div class="control-row">
+            <button class="fine-btn" onclick="adjustBP('dia', -5)">−</button>
+            <input type="range" id="dia_s" class="s-bp" min="0" max="150" value="80" oninput="handleBPChange()">
+            <button class="fine-btn" onclick="adjustBP('dia', 5)">+</button>
+        </div>
+        <div class="trend-indicator" id="trend_nibp" style="display: none;">
+            <div class="trend-bar"><div class="trend-progress" id="trend_progress_nibp"></div></div>
+            <button class="trend-cancel" onclick="cancelTrend('nibp')">✕</button>
+        </div>
+        <button class="btn-send btn-bp" onclick="sendNIBP()">UPDATE</button>
+    </div>
+
+    <!-- TEMP Card -->
+    <div class="card" id="card_temp" style="border-left: 4px solid var(--purple);">
+        <div class="card-header"><div class="param-title" style="color: var(--purple);">TEMP <label class="switch"><input type="checkbox" id="temp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display" id="temp_val" style="color: var(--purple);" onclick="toggleInput('temp_on')">36.8<span class="unit">°C</span></div>
+        <div class="control-row">
+            <button class="fine-btn" onclick="adjust('temp_s', -0.1)">−</button>
+            <input type="range" id="temp_s" class="s-temp" min="30" max="42" step="0.1" value="36.8" oninput="handleChange()">
+            <button class="fine-btn" onclick="adjust('temp_s', 0.1)">+</button>
+        </div>
+        <div class="trend-indicator" id="trend_temp" style="display: none;">
+            <div class="trend-bar"><div class="trend-progress" id="trend_progress_temp"></div></div>
+            <button class="trend-cancel" onclick="cancelTrend('temp')">✕</button>
+        </div>
+        <button class="btn-send btn-temp" onclick="sendVitals()">UPDATE</button>
+    </div>
+
+    <!-- EtCO2 Card (hidden by default) -->
+    <div id="etco2_card" class="card hidden" style="border-left: 4px solid var(--cyan);">
+        <div class="card-header"><div class="param-title" style="color: var(--cyan);">EtCO2 <label class="switch"><input type="checkbox" id="etco2_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display dimmed" id="etco2_val" style="color: var(--cyan);" onclick="toggleInput('etco2_on')">35<span class="unit">mmHg</span></div>
+        <div class="control-row">
+            <button class="fine-btn" onclick="adjust('etco2_s', -1)">−</button>
+            <input type="range" id="etco2_s" class="s-etco2" min="0" max="100" value="35" oninput="handleChange()">
+            <button class="fine-btn" onclick="adjust('etco2_s', 1)">+</button>
+        </div>
+        <div class="trend-indicator" id="trend_etco2" style="display: none;">
+            <div class="trend-bar"><div class="trend-progress" id="trend_progress_etco2"></div></div>
+            <button class="trend-cancel" onclick="cancelTrend('etco2')">✕</button>
+        </div>
+        <button class="btn-send btn-etco2" onclick="sendVitals()">UPDATE</button>
+    </div>
+
+    <!-- ABP Card (hidden by default) -->
+    <div id="abp_card" class="card hidden" style="border-left: 4px solid var(--red);">
+        <div class="card-header"><div class="param-title" style="color: var(--red);">ABP <label class="switch"><input type="checkbox" id="abp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display dimmed" id="abp_val" style="color: var(--red);" onclick="toggleInput('abp_on')">120/80<span class="unit">mmHg</span></div>
+        <div style="font-size: 0.55rem; color: var(--grey); text-align: center; margin: 5px 0;">Uses same BP values - updates live</div>
+        <button class="btn-send btn-bp" onclick="sendVitals()">UPDATE</button>
+    </div>
+</div>
+
+<!-- Timer Overlay -->
+<div class="overlay-panel" id="timer_overlay">
+    <div class="overlay-title">⏱ TIMER</div>
+    <div class="timer-display">
+        <button class="timer-btn" id="timer_start_btn" onclick="toggleTimer()">START</button>
+        <span class="timer-time" id="timer_display">00:00</span>
+        <button class="timer-btn" onclick="resetTimer()">RESET</button>
+    </div>
+</div>
+
+<!-- Volume Overlay -->
+<div class="overlay-panel" id="volume_overlay">
+    <div class="overlay-title">🔊 MASTER VOLUME</div>
+    <div class="volume-display">
+        <input type="range" id="master_volume" min="0" max="100" value="50" oninput="updateMasterVolume()">
+        <span class="volume-val" id="master_vol_val">50%</span>
+    </div>
+</div>
+
+<!-- Trend Overlay -->
+<div class="overlay-panel" id="trend_overlay" style="max-width: 400px;">
+    <div class="overlay-title">📈 SET TREND DURATION</div>
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+        <span style="font-size: 0.8rem; color: var(--grey);">0s</span>
+        <input type="range" id="trend_duration" min="0" max="300" value="60" step="15" oninput="updateTrendDurationDisplay()">
+        <span style="font-size: 0.8rem; color: var(--grey);">5m</span>
+    </div>
+    <div style="text-align: center; margin-bottom: 15px;">
+        <span style="font-size: 1.5rem; font-weight: 800; color: var(--cyan);" id="trend_duration_display">1:00</span>
+    </div>
+    <div style="font-size: 0.65rem; color: var(--grey); margin-bottom: 10px; line-height: 1.4;">Enabled vitals will trend to their set values over this duration. Live sync updates will override individual trends.</div>
+    <button onclick="applyTrend()" style="width: 100%; padding: 12px; background: var(--cyan); color: black; border: none; border-radius: 8px; font-weight: 700; font-size: 0.9rem;">APPLY TREND</button>
+</div>
+
+<!-- Bottom Dock -->
+<div class="bottom-dock">
+    <div class="dock-btn" id="btn_pause" onclick="togglePause()">
+        <span class="icon" id="pause_icon">⏸</span>
+        <span class="label" id="pause_label">Pause</span>
+    </div>
+    <div class="dock-btn" onclick="setAllNormal()">
+        <span class="icon">✓</span>
+        <span class="label">Normal</span>
+    </div>
+    <div class="dock-btn" id="btn_cpr" onclick="toggleCPR()">
+        <span class="icon">💓</span>
+        <span class="label">CPR</span>
+    </div>
+    <div class="dock-btn shock-btn" onclick="sendShock()">
+        <span class="icon">⚡</span>
+        <span class="label">Shock</span>
+    </div>
+    <div class="dock-btn" id="btn_vol" onclick="toggleOverlay('volume')">
+        <span class="icon">🔊</span>
+        <span class="label">Vol</span>
+    </div>
+    <div class="dock-btn" id="btn_timer" onclick="toggleOverlay('timer')">
+        <span class="icon">⏱</span>
+        <span class="label">Timer</span>
+    </div>
+    <div class="dock-btn" id="btn_trend" onclick="toggleOverlay('trend')">
+        <span class="icon">📈</span>
+        <span class="label">Trend</span>
+    </div>
+    <div class="dock-btn" id="btn_etco2" onclick="toggleSpecialCard('etco2')">
+        <span class="icon" style="font-size:0.7rem; font-weight:800;">CO2</span>
+        <span class="label">EtCO2</span>
+    </div>
+    <div class="dock-btn" id="btn_abp" onclick="toggleSpecialCard('abp')">
+        <span class="icon" style="font-size:0.7rem; font-weight:800;">ART</span>
+        <span class="label">ABP</span>
+    </div>
+    <div class="dock-btn live-btn" id="btn_live" onclick="toggleLiveSync()">
+        <span class="icon">📡</span>
+        <span class="label" id="live_label">Manual</span>
+    </div>
+</div>
+
+<div id="qr-modal" onclick="this.style.display='none'">
+    <div id="qrcode"></div>
+    <p style="color:white; font-weight:bold;">SCAN TO CONNECT MONITOR</p>
+</div>
+
+<div id="rhythm-overlay">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+        <h2 style="margin:0; font-size: 1.1rem;">Select ECG Rhythm</h2>
+        <button onclick="toggleRhythmOverlay()" style="background:var(--accent); border:none; color:white; font-weight:bold; font-size:0.9rem; padding: 8px 16px; border-radius: 8px;">DONE</button>
+    </div>
+    <div class="rhythm-grid">
+        <button class="r-btn active" id="r_nsr" onclick="setRhythm('nsr', 'Normal Sinus Rhythm', 'Normal cardiac electrical activity.')">NSR</button>
+        <button class="r-btn" id="r_svt" onclick="setRhythm('svt', 'SVT', 'Supraventricular tachycardia. Narrow QRS, no P waves, rapid rate.')">SVT</button>
+        <button class="r-btn" id="r_afib" onclick="setRhythm('afib', 'Atrial Fibrillation', 'Irregularly irregular rhythm.')">A-FIB</button>
+        <button class="r-btn" id="r_aflutter" onclick="setRhythm('aflutter', 'Atrial Flutter', 'Sawtooth flutter waves with regular QRS.')">A-FLUTTER</button>
+        <button class="r-btn" id="r_junctional" onclick="setRhythm('junctional', 'Junctional Rhythm', 'No P wave, narrow QRS, rate 40-60.')">JUNCTIONAL</button>
+        <button class="r-btn" id="r_avb1" onclick="setRhythm('avb1', '1st Degree AV Block', 'Prolonged PR interval, all beats conducted.')">AVB 1°</button>
+        <button class="r-btn" id="r_avb2_type1" onclick="setRhythm('avb2_type1', '2nd Degree Type I', 'Wenckebach: progressive PR prolongation then dropped QRS.')">AVB 2° T1</button>
+        <button class="r-btn" id="r_avb2_type2" onclick="setRhythm('avb2_type2', '2nd Degree Type II', 'Mobitz: constant PR, intermittent dropped QRS.')">AVB 2° T2</button>
+        <button class="r-btn critical" id="r_avb3" onclick="setRhythm('avb3', '3rd Degree Heart Block', 'CRITICAL: Complete AV dissociation.')">AVB 3°</button>
+        <button class="r-btn critical" id="r_vt" onclick="setRhythm('vt', 'Ventricular Tachycardia', 'CRITICAL: Wide QRS, rapid rate.')">V-TACH</button>
+        <button class="r-btn critical" id="r_vf" onclick="setRhythm('vf', 'Ventricular Fibrillation', 'CRITICAL: No organized rhythm.')">V-FIB</button>
+        <button class="r-btn critical" id="r_asystole" onclick="setRhythm('asystole', 'Asystole', 'CRITICAL: Flatline.')">ASYSTOLE</button>
+        <button class="r-btn critical" id="r_pea" onclick="setRhythm('pea', 'Pulseless Electrical Activity', 'CRITICAL: Electrical activity but no pulse.')">P.E.A</button>
+        <button class="r-btn critical" id="r_idioventricular" onclick="setRhythm('idioventricular', 'Idioventricular Rhythm', 'CRITICAL: Wide QRS, no P waves, rate 20-40.')">IDIOVENT</button>
+        <button class="r-btn critical" id="r_agonal" onclick="setRhythm('agonal', 'Agonal Rhythm', 'CRITICAL: Dying heart, very slow irregular wide complexes.')">AGONAL</button>
+    </div>
+    <div class="rhythm-info" id="rhythm_info"><strong>Normal Sinus Rhythm (NSR)</strong>Normal cardiac electrical activity.</div>
+</div>
+
+<script>
+const socket = io();
+const urlParams = new URLSearchParams(window.location.search);
+const room = urlParams.get('room');
+let currentRhythm = 'nsr', queuedRhythm = null, queuedRhythmName = null;
+let liveSync = false, currentArtifact = 'normal';
+let isPaused = false, isCPRActive = false;
+let ectopicEnabled = false;
+let ectopicFrequency = 'medium';
+let timerRunning = false, timerSeconds = 0, timerInterval = null;
+let activeOverlay = null;
+
+// ==================== TREND SYSTEM ====================
+var trends = {
+    hr: { active: false, startValue: 0, endValue: 0, startTime: 0, duration: 0 },
+    spo2: { active: false, startValue: 0, endValue: 0, startTime: 0, duration: 0 },
+    resp: { active: false, startValue: 0, endValue: 0, startTime: 0, duration: 0 },
+    nibp_sys: { active: false, startValue: 0, endValue: 0, startTime: 0, duration: 0 },
+    nibp_dia: { active: false, startValue: 0, endValue: 0, startTime: 0, duration: 0 },
+    temp: { active: false, startValue: 0, endValue: 0, startTime: 0, duration: 0 },
+    etco2: { active: false, startValue: 0, endValue: 0, startTime: 0, duration: 0 }
+};
+var trendInterval = null;
+var lastSentValues = { hr: 75, spo2: 98, resp: 16, sys: 120, dia: 80, temp: 36.8, etco2: 35 };
+
+function updateTrendDurationDisplay() {
+    var secs = parseInt(document.getElementById('trend_duration').value);
+    var mins = Math.floor(secs / 60);
+    var s = secs % 60;
+    document.getElementById('trend_duration_display').innerText = mins + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function applyTrend() {
+    var duration = parseInt(document.getElementById('trend_duration').value) * 1000;
+    if (duration === 0) {
+        alert('Please set a trend duration greater than 0');
+        return;
+    }
+    
+    var now = Date.now();
+    var vitalsToTrend = ['hr', 'spo2', 'resp', 'temp', 'etco2', 'nibp_sys', 'nibp_dia'];
+    
+    vitalsToTrend.forEach(function(vital) {
+        // Skip if trend already active — only cancelling overrides
+        if (trends[vital].active) return;
+        
+        var slider = document.getElementById(vital + '_s');
+        var toggle = document.getElementById(vital + '_on');
+        if (slider && toggle && toggle.checked) {
+            var currentVal = lastSentValues[vital];
+            var targetVal = parseFloat(slider.value);
+            if (currentVal !== targetVal) {
+                trends[vital] = {
+                    active: true,
+                    startValue: currentVal,
+                    endValue: targetVal,
+                    startTime: now,
+                    duration: duration
+                };
+                document.getElementById('trend_' + vital).style.display = 'flex';
+                document.getElementById('card_' + vital).classList.add('trend-active');
+            }
+        }
+    });
+    
+    // Handle BP separately — skip if already trending
+    if (!trends.nibp_sys.active) {
+        var nibpToggle = document.getElementById('nibp_on');
+        if (nibpToggle && nibpToggle.checked) {
+            var currentSys = lastSentValues.sys;
+            var currentDia = lastSentValues.dia;
+            var targetSys = parseFloat(document.getElementById('sys_s').value);
+            var targetDia = parseFloat(document.getElementById('dia_s').value);
+            
+            if (currentSys !== targetSys || currentDia !== targetDia) {
+                trends.nibp_sys = { active: true, startValue: currentSys, endValue: targetSys, startTime: now, duration: duration };
+                trends.nibp_dia = { active: true, startValue: currentDia, endValue: targetDia, startTime: now, duration: duration };
+                document.getElementById('trend_nibp').style.display = 'flex';
+                document.getElementById('card_nibp').classList.add('trend-active');
+            }
+        }
+    }
+    
+    if (!trendInterval) {
+        trendInterval = setInterval(updateTrends, 500);
+    }
+    
+    toggleOverlay('trend');
+}
+
+function updateTrends() {
+    var now = Date.now();
+    var anyActive = false;
+    
+    ['hr', 'spo2', 'resp', 'temp', 'etco2'].forEach(function(vital) {
+        if (trends[vital].active) {
+            var elapsed = now - trends[vital].startTime;
+            var progress = Math.min(1, elapsed / trends[vital].duration);
+            
+            document.getElementById('trend_progress_' + vital).style.width = (progress * 100) + '%';
+            
+            var currentValue = trends[vital].startValue + (trends[vital].endValue - trends[vital].startValue) * progress;
+            lastSentValues[vital] = currentValue;
+            
+            if (progress >= 1) {
+                completeTrend(vital);
+            } else {
+                anyActive = true;
+                sendTrendUpdate(vital, currentValue);
+            }
+        }
+    });
+    
+    // Handle BP
+    if (trends.nibp_sys.active) {
+        var elapsed = now - trends.nibp_sys.startTime;
+        var progress = Math.min(1, elapsed / trends.nibp_sys.duration);
+        
+        document.getElementById('trend_progress_nibp').style.width = (progress * 100) + '%';
+        
+        var currentSys = trends.nibp_sys.startValue + (trends.nibp_sys.endValue - trends.nibp_sys.startValue) * progress;
+        var currentDia = trends.nibp_dia.startValue + (trends.nibp_dia.endValue - trends.nibp_dia.startValue) * progress;
+        lastSentValues.sys = currentSys;
+        lastSentValues.dia = currentDia;
+        
+        if (progress >= 1) {
+            trends.nibp_sys.active = false;
+            trends.nibp_dia.active = false;
+            lastSentValues.sys = trends.nibp_sys.endValue;
+            lastSentValues.dia = trends.nibp_dia.endValue;
+            document.getElementById('trend_nibp').style.display = 'none';
+            document.getElementById('card_nibp').classList.remove('trend-active');
+            sendBPTrendUpdate(trends.nibp_sys.endValue, trends.nibp_dia.endValue);
+        } else {
+            anyActive = true;
+            sendBPTrendUpdate(currentSys, currentDia);
+        }
+    }
+    
+    if (!anyActive && trendInterval) {
+        clearInterval(trendInterval);
+        trendInterval = null;
+    }
+}
+
+function sendTrendUpdate(vital, value) {
+    var data = {
+        room: room,
+        type: 'vitals_adv',
+        hr: vital === 'hr' ? value : (lastSentValues.hr || document.getElementById('hr_s').value),
+        spo2: vital === 'spo2' ? value : (lastSentValues.spo2 || document.getElementById('spo2_s').value),
+        resp: vital === 'resp' ? value : (lastSentValues.resp || document.getElementById('resp_s').value),
+        etco2: vital === 'etco2' ? value : (lastSentValues.etco2 || document.getElementById('etco2_s').value),
+        temp: vital === 'temp' ? value : (lastSentValues.temp || document.getElementById('temp_s').value),
+        sys: lastSentValues.sys || document.getElementById('sys_s').value,
+        dia: lastSentValues.dia || document.getElementById('dia_s').value,
+        abp_sys: lastSentValues.sys || document.getElementById('sys_s').value,
+        abp_dia: lastSentValues.dia || document.getElementById('dia_s').value,
+        hr_on: document.getElementById('hr_on').checked,
+        spo2_on: document.getElementById('spo2_on').checked,
+        resp_on: document.getElementById('resp_on').checked,
+        etco2_on: document.getElementById('etco2_on').checked,
+        nibp_on: document.getElementById('nibp_on').checked,
+        abp_on: document.getElementById('abp_on').checked,
+        temp_on: document.getElementById('temp_on').checked,
+        rhythm: currentRhythm,
+        artifact: currentArtifact,
+        ectopic: ectopicEnabled, ectopicFrequency: ectopicFrequency
+    };
+    socket.emit('update_vitals', data);
+}
+
+function sendBPTrendUpdate(sys, dia) {
+    var data = {
+        room: room,
+        type: 'vitals_adv',
+        hr: lastSentValues.hr || document.getElementById('hr_s').value,
+        spo2: lastSentValues.spo2 || document.getElementById('spo2_s').value,
+        resp: lastSentValues.resp || document.getElementById('resp_s').value,
+        etco2: lastSentValues.etco2 || document.getElementById('etco2_s').value,
+        temp: lastSentValues.temp || document.getElementById('temp_s').value,
+        sys: sys,
+        dia: dia,
+        abp_sys: sys,
+        abp_dia: dia,
+        hr_on: document.getElementById('hr_on').checked,
+        spo2_on: document.getElementById('spo2_on').checked,
+        resp_on: document.getElementById('resp_on').checked,
+        etco2_on: document.getElementById('etco2_on').checked,
+        nibp_on: document.getElementById('nibp_on').checked,
+        abp_on: document.getElementById('abp_on').checked,
+        temp_on: document.getElementById('temp_on').checked,
+        rhythm: currentRhythm,
+        artifact: currentArtifact,
+        ectopic: ectopicEnabled, ectopic_freq: ectopicFrequency
+    };
+    socket.emit('update_vitals', data);
+}
+
+function completeTrend(vital) {
+    trends[vital].active = false;
+    lastSentValues[vital] = trends[vital].endValue;
+    document.getElementById('trend_' + vital).style.display = 'none';
+    document.getElementById('card_' + vital).classList.remove('trend-active');
+    // Send final value without resetting lastSentValues from sliders
+    sendTrendUpdate(vital, trends[vital].endValue);
+}
+
+function cancelTrend(vital) {
+    if (vital === 'nibp') {
+        trends.nibp_sys.active = false;
+        trends.nibp_dia.active = false;
+        document.getElementById('trend_nibp').style.display = 'none';
+        document.getElementById('card_nibp').classList.remove('trend-active');
+    } else {
+        trends[vital].active = false;
+        document.getElementById('trend_' + vital).style.display = 'none';
+        document.getElementById('card_' + vital).classList.remove('trend-active');
+    }
+}
+
+function sendFullVitals() {
+    var sys = document.getElementById('sys_s').value;
+    var dia = document.getElementById('dia_s').value;
+    var rhythmToSend = queuedRhythm || currentRhythm;
+    
+    lastSentValues = {
+        hr: parseFloat(document.getElementById('hr_s').value),
+        spo2: parseFloat(document.getElementById('spo2_s').value),
+        resp: parseFloat(document.getElementById('resp_s').value),
+        sys: parseFloat(sys),
+        dia: parseFloat(dia),
+        temp: parseFloat(document.getElementById('temp_s').value),
+        etco2: parseFloat(document.getElementById('etco2_s').value)
+    };
+    
+    socket.emit('update_vitals', {
+        room: room, type: 'vitals_adv',
+        hr: document.getElementById('hr_s').value, hr_on: document.getElementById('hr_on').checked,
+        spo2: document.getElementById('spo2_s').value, spo2_on: document.getElementById('spo2_on').checked,
+        resp: document.getElementById('resp_s').value, resp_on: document.getElementById('resp_on').checked,
+        etco2: document.getElementById('etco2_s').value, etco2_on: document.getElementById('etco2_on').checked,
+        sys: sys, dia: dia, abp_sys: sys, abp_dia: dia,
+        nibp_on: document.getElementById('nibp_on').checked, abp_on: document.getElementById('abp_on').checked,
+        temp: document.getElementById('temp_s').value, temp_on: document.getElementById('temp_on').checked,
+        rhythm: rhythmToSend, artifact: currentArtifact,
+        ectopic: ectopicEnabled, ectopicFrequency: ectopicFrequency
+    });
+    updateQueuedRhythmUI();
+}
+
+// ==================== SOCKET ====================
+socket.on('connect', () => {
+    document.getElementById('room_code').innerText = room;
+    document.getElementById('status_dot').classList.add('status-online');
+    document.getElementById('status_text').innerText = 'ONLINE';
+    document.getElementById('status_text').style.color = 'var(--green)';
+    socket.emit('join', { room: room, type: 'controller' });
+    const monitorUrl = window.location.origin + '/monitor?room=' + room + '&mode=advanced';
+    document.getElementById("header-qr").innerHTML = "";
+    new QRCode(document.getElementById("header-qr"), { text: monitorUrl, width: 32, height: 32, correctLevel: QRCode.CorrectLevel.L });
+    document.getElementById("qrcode").innerHTML = "";
+    new QRCode(document.getElementById("qrcode"), { text: monitorUrl, width: 256, height: 256 });
+});
+
+socket.on('disconnect', () => {
+    document.getElementById('status_dot').classList.remove('status-online');
+    document.getElementById('status_text').innerText = 'OFFLINE';
+    document.getElementById('status_text').style.color = 'var(--grey)';
+});
+
+function toggleOverlay(type) {
+    var timerOv = document.getElementById('timer_overlay');
+    var volOv = document.getElementById('volume_overlay');
+    var trendOv = document.getElementById('trend_overlay');
+    var timerBtn = document.getElementById('btn_timer');
+    var volBtn = document.getElementById('btn_vol');
+    var trendBtn = document.getElementById('btn_trend');
+    
+    if (activeOverlay === type) {
+        timerOv.classList.remove('active');
+        volOv.classList.remove('active');
+        trendOv.classList.remove('active');
+        timerBtn.classList.remove('active');
+        volBtn.classList.remove('active');
+        trendBtn.classList.remove('active');
+        activeOverlay = null;
+    } else {
+        timerOv.classList.remove('active');
+        volOv.classList.remove('active');
+        trendOv.classList.remove('active');
+        timerBtn.classList.remove('active');
+        volBtn.classList.remove('active');
+        trendBtn.classList.remove('active');
+        if (type === 'timer') { timerOv.classList.add('active'); timerBtn.classList.add('active'); }
+        else if (type === 'volume') { volOv.classList.add('active'); volBtn.classList.add('active'); }
+        else if (type === 'trend') { trendOv.classList.add('active'); trendBtn.classList.add('active'); }
+        activeOverlay = type;
+    }
+}
+
+function togglePause() {
+    isPaused = !isPaused;
+    var btn = document.getElementById('btn_pause');
+    var icon = document.getElementById('pause_icon');
+    var label = document.getElementById('pause_label');
+    if (isPaused) { btn.classList.add('pause-active'); icon.innerText = '▶'; label.innerText = 'Resume'; }
+    else { btn.classList.remove('pause-active'); icon.innerText = '⏸'; label.innerText = 'Pause'; }
+    socket.emit('update_vitals', { room: room, type: 'pause', paused: isPaused });
+}
+
+function setAllNormal() {
+    document.getElementById('hr_s').value = 75;
+    document.getElementById('spo2_s').value = 98;
+    document.getElementById('resp_s').value = 16;
+    document.getElementById('etco2_s').value = 35;
+    document.getElementById('sys_s').value = 120;
+    document.getElementById('dia_s').value = 80;
+    document.getElementById('temp_s').value = 36.8;
+    queuedRhythm = 'nsr'; queuedRhythmName = 'Normal Sinus Rhythm (NSR)';
+    document.querySelectorAll('.r-btn').forEach(function(b) { b.classList.remove('queued'); });
+    document.getElementById('r_nsr').classList.add('queued');
+    document.getElementById('queued_rhythm_label').style.display = 'flex';
+    document.getElementById('queued_rhythm_name').innerText = queuedRhythmName;
+    document.getElementById('current_rhythm_display').classList.add('has-queued');
+    setArtifact('normal');
+    if (isCPRActive) toggleCPR();
+    // Cancel all trends
+    ['hr', 'spo2', 'resp', 'temp', 'etco2'].forEach(function(v) { cancelTrend(v); });
+    cancelTrend('nibp');
+    updateDisplayValues();
+    if (liveSync) sendVitals();
+    ectopicEnabled = false;
+        ectopicFrequency = 'medium';
+        document.getElementById('ectopic_on').checked = false;
+        document.getElementById('ectopic_status').innerText = 'OFF';
+        document.getElementById('ectopic_status').style.color = '#666';
+        document.getElementById('ectopic_freq_row').style.display = 'none';
+        document.querySelectorAll('#ectopic_freq_row .artifact-btn').forEach(function(b) { b.classList.remove('active'); });
+        document.getElementById('ect_medium').classList.add('active');
+}
+
+function toggleEctopic() {
+    ectopicEnabled = document.getElementById('ectopic_on').checked;
+    document.getElementById('ectopic_status').innerText = ectopicEnabled ? 'ON' : 'OFF';
+    document.getElementById('ectopic_status').style.color = ectopicEnabled ? 'var(--green)' : '#666';
+    document.getElementById('ectopic_freq_row').style.display = ectopicEnabled ? 'block' : 'none';
+    if (liveSync) sendVitals();
+}
+
+function setEctopicFreq(freq) {
+    ectopicFrequency = freq;
+    document.querySelectorAll('#ectopic_freq_row .artifact-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('ect_' + freq).classList.add('active');
+    if (liveSync) sendVitals();
+}
+function toggleCPR() {
+    isCPRActive = !isCPRActive;
+    var btn = document.getElementById('btn_cpr');
+    if (isCPRActive) btn.classList.add('cpr-active');
+    else btn.classList.remove('cpr-active');
+    socket.emit('update_vitals', { room: room, type: 'cpr', active: isCPRActive, ectopic: ectopicEnabled, });
+}
+
+function sendShock() {
+    socket.emit('update_vitals', { room: room, type: 'shock' });
+    var btn = document.querySelector('.shock-btn');
+    btn.style.background = 'var(--yellow)'; btn.style.color = 'black';
+    setTimeout(function() { btn.style.background = ''; btn.style.color = ''; }, 200);
+}
+
+function updateMasterVolume() {
+    var vol = document.getElementById('master_volume').value;
+    document.getElementById('master_vol_val').innerText = vol + '%';
+    socket.emit('update_vitals', { room: room, type: 'master_volume', volume: parseInt(vol) });
+}
+
+function toggleTimer() {
+    timerRunning = !timerRunning;
+    var btn = document.getElementById('timer_start_btn');
+    if (timerRunning) {
+        btn.classList.add('running'); btn.innerText = 'STOP';
+        timerInterval = setInterval(function() { timerSeconds++; updateTimerDisplay(); }, 1000);
+    } else {
+        btn.classList.remove('running'); btn.innerText = 'START';
+        clearInterval(timerInterval);
+    }
+}
+
+function resetTimer() { timerSeconds = 0; updateTimerDisplay(); if (timerRunning) toggleTimer(); }
+function updateTimerDisplay() {
+    var mins = Math.floor(timerSeconds / 60).toString().padStart(2, '0');
+    var secs = (timerSeconds % 60).toString().padStart(2, '0');
+    document.getElementById('timer_display').innerText = mins + ':' + secs;
+}
+
+function toggleLiveSync() {
+    liveSync = !liveSync;
+    var btn = document.getElementById('btn_live');
+    var label = document.getElementById('live_label');
+    var buttons = document.querySelectorAll('.btn-send');
+    if (liveSync) {
+        btn.classList.add('active');
+        label.innerText = 'Live';
+        buttons.forEach(function(b) { b.disabled = true; b.classList.add('live-disabled'); b.innerText = 'LIVE'; });
+        sendVitals();
+    } else {
+        btn.classList.remove('active');
+        label.innerText = 'Manual';
+        buttons.forEach(function(b) { b.disabled = false; b.classList.remove('live-disabled'); b.innerText = 'UPDATE'; });
+    }
+}
+
+function showQR() { document.getElementById('qr-modal').style.display = 'flex'; }
+function openMonitor() { window.open('/monitor?room=' + room + '&mode=advanced', '_blank'); }
+function toggleRhythmOverlay() { document.getElementById('rhythm-overlay').classList.toggle('active'); }
+function flashRoomCode() { var rc = document.getElementById('room_code'); rc.style.color = 'white'; setTimeout(function() { rc.style.color = 'var(--accent)'; }, 150); }
+function handleChange() { updateDisplayValues(); if (liveSync) sendVitals(); }
+function handleBPChange() { updateDisplayValues(); if (liveSync) sendVitals(); }
+
+function adjust(id, delta) {
+    var slider = document.getElementById(id);
+    var step = parseFloat(slider.step) || 1;
+    var newVal = parseFloat(slider.value) + delta;
+    if (newVal >= parseFloat(slider.min) && newVal <= parseFloat(slider.max)) { 
+        slider.value = step < 1 ? newVal.toFixed(1) : Math.round(newVal); 
+        handleChange(); 
+    }
+}
+
+function adjustBP(type, delta) {
+    var s = document.getElementById(type + '_s');
+    var v = parseFloat(s.value) + delta;
+    if (v >= parseFloat(s.min) && v <= parseFloat(s.max)) { s.value = v; handleBPChange(); }
+}
+
+function toggleInput(id) { var cb = document.getElementById(id); cb.checked = !cb.checked; handleChange(); }
+
+function toggleSpecialCard(type) {
+    var card = document.getElementById(type + '_card');
+    var toggle = document.getElementById(type + '_on');
+    var btn = document.getElementById('btn_' + type);
+    var isHidden = card.classList.contains('hidden');
+    
+    if (isHidden) {
+        card.classList.remove('hidden');
+        toggle.checked = true;
+        btn.classList.add('active');
+    } else {
+        card.classList.add('hidden');
+        toggle.checked = false;
+        btn.classList.remove('active');
+    }
+    if (type === 'abp') document.getElementById('bp_sync_label').style.display = isHidden ? 'block' : 'none';
+    handleChange();
+}
+
+function setRhythm(id, name, description) {
+    queuedRhythm = id; queuedRhythmName = name;
+    document.querySelectorAll('.r-btn').forEach(function(b) {
+        b.classList.remove('queued');
+        if (b.id === 'r_' + currentRhythm) b.classList.add('active');
+        else b.classList.remove('active');
+    });
+    document.getElementById('r_' + id).classList.add('queued');
+    document.getElementById('rhythm_info').innerHTML = '<strong>' + name + '</strong>' + description;
+    document.getElementById('queued_rhythm_label').style.display = 'flex';
+    document.getElementById('queued_rhythm_name').innerText = name;
+    document.getElementById('current_rhythm_display').classList.add('has-queued');
+    if (liveSync) sendVitals();
+}
+
+function updateQueuedRhythmUI() {
+    if (queuedRhythm) {
+        currentRhythm = queuedRhythm;
+        document.getElementById('current_rhythm_display').innerText = queuedRhythmName || currentRhythm.toUpperCase();
+        document.querySelectorAll('.r-btn').forEach(function(b) { b.classList.remove('active', 'queued'); });
+        document.getElementById('r_' + currentRhythm).classList.add('active');
+        queuedRhythm = null; queuedRhythmName = null;
+        document.getElementById('queued_rhythm_label').style.display = 'none';
+        document.getElementById('current_rhythm_display').classList.remove('has-queued');
+    }
+}
+
+function setArtifact(type) {
+    currentArtifact = type;
+    document.querySelectorAll('.artifact-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('art_' + (type === 'low_perfusion' ? 'lowperf' : type)).classList.add('active');
+    if (liveSync) sendVitals();
+}
+
+function updateDisplayValues() {
+    var hr = document.getElementById('hr_s').value;
+    var spo2 = document.getElementById('spo2_s').value;
+    var resp = document.getElementById('resp_s').value;
+    var etco2 = document.getElementById('etco2_s').value;
+    var temp = parseFloat(document.getElementById('temp_s').value).toFixed(1);
+    var sys = document.getElementById('sys_s').value;
+    var dia = document.getElementById('dia_s').value;
+
+    document.getElementById('hr_val').innerHTML = hr + '<span class="unit">BPM</span>';
+    document.getElementById('spo2_val').innerHTML = spo2 + '<span class="unit">%</span>';
+    document.getElementById('resp_val').innerHTML = resp + '<span class="unit">BRPM</span>';
+    document.getElementById('etco2_val').innerHTML = etco2 + '<span class="unit">mmHg</span>';
+    document.getElementById('nibp_val').innerHTML = sys + '/' + dia + '<span class="unit">mmHg</span>';
+    document.getElementById('abp_val').innerHTML = sys + '/' + dia + '<span class="unit">mmHg</span>';
+    document.getElementById('temp_val').innerHTML = temp + '<span class="unit">°C</span>';
+
+    ['hr', 'spo2', 'resp', 'etco2', 'nibp', 'abp', 'temp'].forEach(function(key) {
+        var display = document.getElementById(key + '_val');
+        var checkbox = document.getElementById(key + '_on');
+        if (checkbox && !checkbox.checked) display.classList.add('dimmed');
+        else if (display) display.classList.remove('dimmed');
+    });
+}
+
+function sendVitals() {
+    flashRoomCode();
+    sendFullVitals();
+}
+
+function resetSim() {
+    if (confirm("Reset all vitals to normal?")) {
+        document.getElementById('hr_s').value = 75;
+        document.getElementById('spo2_s').value = 98;
+        document.getElementById('resp_s').value = 16;
+        document.getElementById('etco2_s').value = 35;
+        document.getElementById('sys_s').value = 120;
+        document.getElementById('dia_s').value = 80;
+        document.getElementById('temp_s').value = 36.8;
+        ['hr', 'spo2', 'resp', 'nibp', 'temp'].forEach(function(v) { document.getElementById(v + '_on').checked = false; });
+        
+        document.getElementById('etco2_card').classList.add('hidden');
+        document.getElementById('abp_card').classList.add('hidden');
+        document.getElementById('etco2_on').checked = false;
+        document.getElementById('abp_on').checked = false;
+        document.getElementById('btn_etco2').classList.remove('active');
+        document.getElementById('btn_abp').classList.remove('active');
+        document.getElementById('bp_sync_label').style.display = 'none';
+        
+        // Cancel all trends
+        ['hr', 'spo2', 'resp', 'temp', 'etco2'].forEach(function(v) { 
+            trends[v].active = false;
+            document.getElementById('trend_' + v).style.display = 'none';
+            document.getElementById('card_' + v).classList.remove('trend-active');
+        });
+        trends.nibp_sys.active = false;
+        trends.nibp_dia.active = false;
+        document.getElementById('trend_nibp').style.display = 'none';
+        document.getElementById('card_nibp').classList.remove('trend-active');
+
+        ectopicEnabled = false;
+        ectopicFrequency = 'medium';
+        document.getElementById('ectopic_on').checked = false;
+        document.getElementById('ectopic_status').innerText = 'OFF';
+        document.getElementById('ectopic_status').style.color = '#666';
+        document.getElementById('ectopic_freq_row').style.display = 'none';
+        document.querySelectorAll('#ectopic_freq_row .artifact-btn').forEach(function(b) { b.classList.remove('active'); });
+        document.getElementById('ect_medium').classList.add('active');
+        
+        setArtifact('normal');
+        currentRhythm = 'nsr'; queuedRhythm = null; queuedRhythmName = null;
+        document.querySelectorAll('.r-btn').forEach(function(b) { b.classList.remove('active', 'queued'); });
+        document.getElementById('r_nsr').classList.add('active');
+        document.getElementById('current_rhythm_display').innerText = 'NSR';
+        document.getElementById('current_rhythm_display').classList.remove('has-queued');
+        document.getElementById('queued_rhythm_label').style.display = 'none';
+        if (isPaused) togglePause();
+        if (isCPRActive) toggleCPR();
+        resetTimer();
+        document.getElementById('master_volume').value = 50;
+        updateMasterVolume();
+        updateDisplayValues();
+        lastSentValues = { hr: 75, spo2: 98, resp: 16, sys: 120, dia: 80, temp: 36.8, etco2: 35 };
+        // Send as vitals_adv with all toggles off (guaranteed to be forwarded)
+        socket.emit('update_vitals', {
+            room: room, type: 'vitals_adv',
+            hr: 75, spo2: 98, resp: 16, etco2: 35,
+            sys: 120, dia: 80, abp_sys: 120, abp_dia: 80, temp: 36.8,
+            hr_on: false, spo2_on: false, resp_on: false,
+            etco2_on: false, nibp_on: false, abp_on: false, temp_on: false,
+            rhythm: 'nsr', artifact: 'normal',
+            ectopic: false, ectopic_freq: 'medium', is_reset: true
+        });
+    }
+}
+
+function sendNIBP() {
+    flashRoomCode();
+    socket.emit('update_vitals', {
+        room: room, type: 'nibp_reading',
+        sys: document.getElementById('sys_s').value, dia: document.getElementById('dia_s').value, nibp_on: document.getElementById('nibp_on').checked
+    });
+}
+
+window.addEventListener('load', function() { 
+    updateDisplayValues();
+    updateTrendDurationDisplay();
+    ['hr', 'spo2', 'resp', 'etco2', 'nibp', 'abp', 'temp'].forEach(function(key) {
+        document.getElementById(key + '_val').classList.add('dimmed');
+    });
+// ==================== ADAPTIVE GRID FILL ====================
+function updateGridLayout() {
+    var grid = document.querySelector('.scroll-area');
+    var cards = Array.from(grid.querySelectorAll('.card:not(.hidden)'));
+    var gridStyle = window.getComputedStyle(grid);
+    var cols = gridStyle.getPropertyValue('grid-template-columns').split(' ').length;
+    
+    // Reset all spans
+    cards.forEach(function(c) { c.style.gridColumn = ''; });
+    
+    var totalCards = cards.length;
+    var remainder = totalCards % cols;
+    
+    if (remainder > 0 && totalCards > cols) {
+        // Last row has fewer cards — spread them to fill
+        var lastRowCards = cards.slice(totalCards - remainder);
+        var colsPerCard = Math.floor(cols / remainder);
+        var extraCols = cols % remainder;
+        
+        var colStart = 1;
+        lastRowCards.forEach(function(card, i) {
+            var span = colsPerCard + (i < extraCols ? 1 : 0);
+            card.style.gridColumn = 'span ' + span;
+        });
+    }
+}
+
+// Run on load, resize, and when cards show/hide
+window.addEventListener('resize', updateGridLayout);
+new MutationObserver(updateGridLayout).observe(
+    document.querySelector('.scroll-area'), 
+    { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }
+);
+updateGridLayout();
+});
+</script>
+</body>
+</html>
