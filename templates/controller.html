@@ -3,85 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SimControl - Pro</title>
+    <title>SimControl - Pro (Basic)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
     <style>
-        :root { --bg: #f2f2f7; --accent: #007aff; --hr-pulse: #1b8a4d; --spo2: #007ead; --temp: #8e44ad; --bp: #3a3a3c; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        :root {
+            --bg: #f2f2f7;
+            --surface: #ffffff;
+            --surface-raised: #f9f9fb;
+            --border: #d1d1d6;
+            --border-subtle: #e5e5ea;
+            --text-primary: #1c1c1e;
+            --text-secondary: #8e8e93;
+            --text-dim: #c7c7cc;
+            --accent: #007aff;
+            --green: #34c759;
+            --cyan: #32ade6;
+            --red: #ff3b30;
+            --purple: #af52de;
+            --bp-color: #636366;
+        }
+        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: var(--text-primary); }
 
-        .utility-bar { background: #fff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #d1d1d6; }
-        .conn-status { font-size: 0.75rem; font-weight: 700; color: #8e8e93; display: flex; align-items: center; gap: 6px; }
-        .dot { width: 10px; height: 10px; border-radius: 50%; background: #ff3b30; }
-        .dot.online { background: #34c759; box-shadow: 0 0 5px #34c759; }
+        /* ===== UTILITY BAR ===== */
+        .utility-bar { background: var(--surface); padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); box-shadow: 0 1px 0 rgba(0,0,0,0.04); }
+        .conn-status { font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; letter-spacing: 1px; text-transform: uppercase; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); transition: all 0.4s; }
+        .dot.online { background: var(--green); box-shadow: 0 0 6px rgba(52, 199, 89, 0.35); }
 
+        .util-btn-group { display: flex; gap: 6px; }
+        .util-btn { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 6px 12px; font-size: 0.65rem; font-weight: 700; cursor: pointer; background: var(--surface-raised); color: var(--text-secondary); transition: all 0.1s; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; }
+        .util-btn:active { transform: scale(0.94); background: var(--border-subtle); }
+
+        /* ===== SCROLL AREA ===== */
         .scroll-area { padding: 12px; overflow-y: auto; flex-grow: 1; padding-bottom: 30px; }
-        .card { background: #fff; border-radius: 20px; padding: 16px; margin-bottom: 12px; border: 1px solid #e5e5ea; }
-        
-        .room-card { text-align: center; border-bottom: 4px solid var(--accent); padding: 10px; }
+
+        /* ===== CARDS ===== */
+        .card { background: var(--surface); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--border-subtle); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+
+        .room-card { text-align: center; border-left: 4px solid var(--accent); padding: 12px; }
         .room-id { font-size: 1.8rem; font-weight: 900; letter-spacing: 4px; color: var(--accent); margin: 5px 0; }
-        #qr_img { width: 110px; height: 110px; margin-top: 5px; border-radius: 12px; border: 1px solid #eee; }
 
-        /* Unified Toggle/Label Layout */
+        #qr_img { width: 110px; height: 110px; margin-top: 5px; border-radius: 10px; border: 1px solid var(--border-subtle); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+        #qr_img:active { transform: scale(1.05); box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2); }
+
+        #qr_fullscreen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.92); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; }
+        #qr_fullscreen.active { display: flex; }
+        #qr_fullscreen_img { width: 80vmin; height: 80vmin; display: flex; align-items: center; justify-content: center; }
+        #qr_fullscreen p { color: white; margin-top: 20px; font-weight: 700; letter-spacing: 2px; font-size: 0.75rem; }
+
+        .copy-link-btn { margin-top: 10px; width: 100%; padding: 10px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-raised); font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); cursor: pointer; transition: all 0.1s; font-family: 'JetBrains Mono', monospace; }
+        .copy-link-btn:active { transform: scale(0.97); background: var(--border-subtle); }
+
+        /* ===== CARD SECTIONS ===== */
         .card-top { display: flex; justify-content: flex-start; align-items: center; gap: 12px; margin-bottom: 12px; }
-        .label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #8e8e93; }
-        .display-val { font-size: 2.2rem; font-weight: 800; color: #1c1c1e; }
-        
-        /* Live Sync Grey Box - now matching toggle format */
-        .sync-row { display: flex; justify-content: flex-start; align-items: center; gap: 12px; background: #f2f2f7; padding: 8px 12px; border-radius: 12px; margin-bottom: 12px; }
+        .label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 1px; }
+        .display-val { font-size: 2.2rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
 
+        .sync-row { display: flex; justify-content: flex-start; align-items: center; gap: 12px; background: var(--surface-raised); padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; border: 2px solid transparent; transition: all 0.3s; }
+        .sync-row.active { border-color: var(--accent); background: rgba(0, 122, 255, 0.05); }
+
+        /* ===== CONTROLS ===== */
         .controls { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
         .slider-wrapper { margin-top: 8px; }
-        .slider-hint { font-size: 0.6rem; font-weight: 800; color: #8e8e93; margin-left: 54px; margin-bottom: -4px; }
-        
-        /* Subtle vs Active Slider Styling */
-        input[type=range] { flex-grow: 1; -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; outline: none; transition: background 0.2s; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #fff; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.2); border: 0.5px solid #d1d1d6; }
-        
-        #hr_s { background: #c5e1d1; } #hr_s:active { background: #146639; }
-        #spo2_s { background: #cce5ef; } #spo2_s:active { background: #005d82; }
-        #sys_s, #dia_s { background: #d8d8d9; } #sys_s:active, #dia_s:active { background: #2c2c2e; }
-        #temp_s { background: #e8daef; } #temp_s:active { background: #6b3482; }
+        .slider-hint { font-size: 0.55rem; font-weight: 800; color: var(--text-secondary); margin-left: 54px; margin-bottom: -4px; letter-spacing: 1px; }
 
-        .step-btn { width: 44px; height: 44px; border-radius: 12px; border: none; background: #e5e5ea; font-size: 1.5rem; transition: transform 0.1s; }
-        .step-btn:active { transform: scale(0.9); background: #d1d1d6; }
+        input[type=range] { flex-grow: 1; -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; outline: none; transition: background 0.2s; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #fff; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.15), 0 0 0 0.5px rgba(0,0,0,0.04); border: none; }
 
-        /* Pill Toggles */
+        #hr_s { background: linear-gradient(90deg, #d1f5df, #b8eece); } #hr_s:active { background: var(--green); }
+        #spo2_s { background: linear-gradient(90deg, #d4eef9, #b8e2f5); } #spo2_s:active { background: var(--cyan); }
+        #sys_s, #dia_s { background: linear-gradient(90deg, #e5e5ea, #d1d1d6); } #sys_s:active, #dia_s:active { background: var(--bp-color); }
+        #temp_s { background: linear-gradient(90deg, #ead6f5, #dcc4ef); } #temp_s:active { background: var(--purple); }
+
+        .step-btn { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border-subtle); background: var(--surface); font-size: 1.4rem; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.1s; font-family: 'JetBrains Mono', monospace; }
+        .step-btn:active { transform: scale(0.9); background: var(--border-subtle); }
+
+        /* ===== TOGGLE SWITCH ===== */
         .switch { position: relative; display: inline-block; width: 51px; height: 31px; transition: transform 0.1s; flex-shrink: 0; }
         .switch:active { transform: scale(0.92); }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #d1d1d6; transition: .3s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 27px; width: 27px; left: 2px; bottom: 2px; background: #fff; transition: .3s; border-radius: 50%; }
-        input:checked + .slider { background: #34c759; }
+        .slider:before { position: absolute; content: ""; height: 27px; width: 27px; left: 2px; bottom: 2px; background: #fff; transition: .3s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        input:checked + .slider { background: var(--green); }
         input:checked + .slider:before { transform: translateX(20px); }
 
-        /* Signal Quality Buttons */
+        /* ===== QUALITY BUTTONS ===== */
         .quality-group { display: flex; gap: 5px; margin-top: 10px; }
-        .q-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd; background: #f9f9f9; font-size: 0.7rem; font-weight: bold; cursor: pointer; transition: all 0.1s; }
-        .q-btn:active { transform: scale(0.95); }
-        .q-btn.active { background: var(--spo2); color: white; border-color: var(--spo2); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .q-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--surface-raised); font-size: 0.65rem; font-weight: 700; cursor: pointer; transition: all 0.1s; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; }
+        .q-btn.active { background: var(--cyan); color: white; border-color: var(--cyan); box-shadow: 0 2px 6px rgba(50, 173, 230, 0.3); }
 
-        .btn-action { width: 100%; border: none; padding: 15px; border-radius: 12px; font-weight: bold; margin-top: 12px; font-size: 0.9rem; cursor: pointer; color: white; transition: all 0.2s; }
+        /* ===== ACTION BUTTONS ===== */
+        .btn-action { width: 100%; border: none; padding: 14px; border-radius: 12px; font-weight: 700; margin-top: 12px; font-size: 0.85rem; cursor: pointer; color: white; transition: all 0.2s; opacity: 1; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; }
         .btn-action:active { transform: scale(0.97); filter: brightness(0.9); }
-        .btn-success { background: #34c759 !important; }
+        .btn-action:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+        .btn-success { background: var(--green) !important; }
+        .btn-live-mode { background: var(--accent) !important; animation: pulse-subtle 2s infinite; }
+        @keyframes pulse-subtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
 
-        .util-btn { border: none; border-radius: 8px; padding: 6px 12px; font-size: 0.7rem; font-weight: 700; cursor: pointer; background: #e5e5ea; transition: transform 0.1s; }
-        .util-btn:active { transform: scale(0.94); }
-        
+        /* ===== PRESETS ===== */
         .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .btn-preset { padding: 12px; border: 2px solid #ddd; border-radius: 12px; font-weight: bold; background: #fff; cursor: pointer; font-size: 1rem; transition: transform 0.1s; }
+        .btn-preset { padding: 14px; border: 2px solid var(--border); border-radius: 12px; font-weight: 700; background: var(--surface); cursor: pointer; font-size: 0.95rem; transition: all 0.1s; font-family: 'JetBrains Mono', monospace; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
         .btn-preset:active { transform: scale(0.95); }
-        .p-normal { border-color: #34c759; color: #34c759; }
-        .p-arrest { border-color: #ff3b30; color: #ff3b30; }
+        .p-normal { border-color: var(--green); color: var(--green); }
+        .p-arrest { border-color: var(--red); color: var(--red); }
     </style>
 </head>
 <body>
 
 <div class="utility-bar">
     <div class="conn-status"><div id="status_dot" class="dot"></div><span id="status_text">OFFLINE</span></div>
-    <div style="display:flex; gap:8px;">
-        <button class="util-btn" style="background:#5856d6; color:white;" onclick="masterReset()">RESET SIM</button>
+    <div class="util-btn-group">
+        <button class="util-btn" style="background:var(--accent); color:white; border-color:var(--accent);" onclick="masterReset()">RESET SIM</button>
         <button class="util-btn" onclick="location.reload()">REFRESH</button>
-        <button class="util-btn" style="background:#ff3b30; color:white;" onclick="remoteShutdown()">OFF</button>
+        <button class="util-btn" style="background:var(--red); color:white; border-color:var(--red);" onclick="remoteShutdown()">OFF</button>
     </div>
 </div>
 
@@ -89,26 +126,26 @@
     <div class="card room-card">
         <div class="label">Monitor Access Code</div>
         <div id="room_id_display" class="room-id">----</div>
-        <img id="qr_img" src="" style="display:none;">
-        <button class="util-btn" style="margin-top:10px; width:100%; padding:10px;" onclick="copyMonitorLink()">📋 COPY MONITOR LINK</button>
+        <div id="qr_img" onclick="showFullscreenQR()" style="display:inline-block; background:white; padding:3px; border-radius:8px; cursor:pointer;"></div>
+        <button class="copy-link-btn" onclick="copyMonitorLink()">📋 COPY MONITOR LINK</button>
     </div>
 
-    <div class="card" style="border-left: 6px solid var(--hr-pulse);">
+    <div class="card" style="border-left: 4px solid var(--green);">
         <div class="card-top">
             <label class="switch"><input type="checkbox" id="p_conn" onchange="sendVitals()"><span class="slider"></span></label>
             <div class="label">SpO2 Probe Connected</div>
         </div>
-        
-        <div class="sync-row">
-            <label class="switch" style="transform: scale(0.8);"><input type="checkbox" id="live_sync"><span class="slider"></span></label>
-            <span style="font-size: 0.7rem; font-weight: 800; color: #666;">LIVE SYNC TO MONITOR</span>
+
+        <div class="sync-row" id="sync_row">
+            <label class="switch" style="transform: scale(0.8);"><input type="checkbox" id="live_sync" onchange="toggleLiveSync()"><span class="slider"></span></label>
+            <span style="font-size: 0.65rem; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.5px;" id="sync_label">LIVE SYNC TO MONITOR</span>
         </div>
 
         <div style="display: flex; gap: 20px;">
-            <div><span class="display-val" id="hr_l" style="color: var(--hr-pulse);">60</span> <small>BPM</small></div>
-            <div><span class="display-val" id="spo2_l" style="color: var(--spo2);">98</span> <small>%</small></div>
+            <div><span class="display-val" id="hr_l" style="color: var(--green);">60</span> <small style="color:var(--text-secondary); font-weight:700;">BPM</small></div>
+            <div><span class="display-val" id="spo2_l" style="color: var(--cyan);">98</span> <small style="color:var(--text-secondary); font-weight:700;">%</small></div>
         </div>
-        
+
         <div class="slider-wrapper">
             <div class="slider-hint">HEART RATE</div>
             <div class="controls">
@@ -126,15 +163,15 @@
             </div>
         </div>
 
-        <div class="label" style="margin-top:15px; font-size:0.6rem;">Live Signal Quality</div>
+        <div class="label" style="margin-top:15px; font-size:0.55rem;">SIGNAL QUALITY</div>
         <div class="quality-group">
             <button id="q_norm" class="q-btn active" onclick="setQuality('normal')">NORMAL</button>
             <button id="q_poor" class="q-btn" onclick="setQuality('poor')">POOR</button>
         </div>
-        <button class="btn-action" id="btn_sync_vitals" style="background: var(--hr-pulse);" onclick="triggerSync(this, sendVitals)">SYNC VITALS</button>
+        <button class="btn-action" id="btn_sync_vitals" style="background: var(--green);" onclick="triggerSync(this, sendVitals)">SYNC VITALS</button>
     </div>
 
-    <div class="card" style="border-left: 6px solid var(--bp);">
+    <div class="card" style="border-left: 4px solid var(--bp-color);">
         <div class="card-top">
             <label class="switch"><input type="checkbox" id="bp_conn" onchange="sendBP()"><span class="slider"></span></label>
             <div class="label">BP Cuff Attached</div>
@@ -156,13 +193,13 @@
                 <button class="step-btn" onclick="step('dia_s', 5)">+</button>
             </div>
         </div>
-        <button class="btn-action" id="btn_sync_bp" style="background: var(--bp);" onclick="triggerSync(this, sendBP)">SET BP TARGET</button>
+        <button class="btn-action" id="btn_sync_bp" style="background: var(--bp-color);" onclick="triggerSync(this, sendBP)">SET BP TARGET</button>
     </div>
 
-    <div class="card" style="border-left: 6px solid var(--temp);">
+    <div class="card" style="border-left: 4px solid var(--purple);">
         <div class="card-top">
             <div class="label">Temperature Control</div>
-            <div class="display-val"><span id="temp_l">36.8</span>°</div>
+            <div class="display-val"><span id="temp_l">36.8</span><small style="color:var(--text-secondary);">°</small></div>
         </div>
         <div class="slider-wrapper">
             <div class="slider-hint">CORE TEMP (°C)</div>
@@ -172,7 +209,7 @@
                 <button class="step-btn" onclick="step('temp_s', 0.1)">+</button>
             </div>
         </div>
-        <button class="btn-action" id="btn_sync_temp" style="background: var(--temp);" onclick="triggerSync(this, pushTemp)">PUSH TEMP TO MONITOR</button>
+        <button class="btn-action" id="btn_sync_temp" style="background: var(--purple);" onclick="triggerSync(this, pushTemp)">PUSH TEMP TO MONITOR</button>
     </div>
 
     <div class="preset-grid">
@@ -181,10 +218,17 @@
     </div>
 </div>
 
+<!-- Fullscreen QR modal -->
+<div id="qr_fullscreen" onclick="hideFullscreenQR()">
+    <div id="qr_fullscreen_img" style="background:white; padding:20px; border-radius:20px;"></div>
+    <p>SCAN TO CONNECT MONITOR</p>
+</div>
+
 <script>
     var socket = io({ transports: ['websocket'], upgrade: false });
     let syncTimer = null;
     let currentQuality = 'normal';
+    const mode = 'basic';
     const urlParams = new URLSearchParams(window.location.search);
     const roomCode = urlParams.get('room');
 
@@ -193,8 +237,11 @@
         document.getElementById('status_text').innerText = "ONLINE";
         if(roomCode) {
             document.getElementById('room_id_display').innerText = roomCode;
-            document.getElementById('qr_img').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin + '/monitor?room=' + roomCode)}`;
-            document.getElementById('qr_img').style.display = 'inline-block';
+            const monitorUrl = window.location.origin + '/monitor?room=' + roomCode + '&mode=' + mode;
+            document.getElementById('qr_img').innerHTML = '';
+            new QRCode(document.getElementById('qr_img'), { text: monitorUrl, width: 110, height: 110, correctLevel: QRCode.CorrectLevel.L });
+            document.getElementById('qr_fullscreen_img').innerHTML = '';
+            new QRCode(document.getElementById('qr_fullscreen_img'), { text: monitorUrl, width: 280, height: 280 });
         }
         socket.emit('join', { room: roomCode, type: 'controller' });
     });
@@ -204,7 +251,29 @@
         document.getElementById('status_text').innerText = "OFFLINE";
     });
 
-    // Fix: Proper Quality Button State Management
+    function showFullscreenQR() { document.getElementById('qr_fullscreen').classList.add('active'); }
+    function hideFullscreenQR() { document.getElementById('qr_fullscreen').classList.remove('active'); }
+
+    function toggleLiveSync() {
+        const isLive = document.getElementById('live_sync').checked;
+        const syncRow = document.getElementById('sync_row');
+        const btn = document.getElementById('btn_sync_vitals');
+        const label = document.getElementById('sync_label');
+        if (isLive) {
+            syncRow.classList.add('active');
+            btn.innerText = "LIVE SYNC ACTIVE ⚡";
+            btn.disabled = true;
+            btn.classList.add('btn-live-mode');
+            label.innerText = "LIVE SYNC ACTIVE";
+        } else {
+            syncRow.classList.remove('active');
+            btn.innerText = "SYNC VITALS";
+            btn.disabled = false;
+            btn.classList.remove('btn-live-mode');
+            label.innerText = "LIVE SYNC TO MONITOR";
+        }
+    }
+
     function setQuality(q) {
         currentQuality = q;
         document.getElementById('q_norm').classList.toggle('active', q === 'normal');
@@ -217,10 +286,7 @@
         btn.innerText = "SENT ✓";
         btn.classList.add('btn-success');
         func();
-        setTimeout(() => {
-            btn.innerText = originalText;
-            btn.classList.remove('btn-success');
-        }, 1000);
+        setTimeout(() => { btn.innerText = originalText; btn.classList.remove('btn-success'); }, 1000);
     }
 
     function step(id, amount) {
@@ -245,7 +311,7 @@
 
     function sendVitals() {
         socket.emit('update_vitals', {
-            room: roomCode, type: 'vitals', 
+            room: roomCode, type: 'vitals',
             hr: document.getElementById('hr_s').value, hr_conn: document.getElementById('p_conn').checked,
             spo2: document.getElementById('spo2_s').value, spo2_conn: document.getElementById('p_conn').checked,
             signal_quality: currentQuality
@@ -254,8 +320,8 @@
 
     function sendBP() {
         socket.emit('update_vitals', {
-            room: roomCode, type: 'set_target_bp', 
-            sys: document.getElementById('sys_s').value, dia: document.getElementById('dia_s').value, 
+            room: roomCode, type: 'set_target_bp',
+            sys: document.getElementById('sys_s').value, dia: document.getElementById('dia_s').value,
             bp_conn: document.getElementById('bp_conn').checked
         });
     }
@@ -279,7 +345,12 @@
 
     function masterReset() { if(confirm("RESET ENTIRE SIMULATION?")) { socket.emit('update_vitals', { room: roomCode, type: 'system_reset' }); location.reload(); } }
     function remoteShutdown() { if(confirm("SHUT DOWN MONITOR?")) socket.emit('system_shutdown', { room: roomCode }); }
-    function copyMonitorLink() { navigator.clipboard.writeText(window.location.origin + '/monitor?room=' + roomCode).then(() => alert("Monitor Link Copied!")); }
+    function copyMonitorLink() {
+        const monitorUrl = window.location.origin + '/monitor?room=' + roomCode + '&mode=' + mode;
+        navigator.clipboard.writeText(monitorUrl).then(() => alert("Monitor Link Copied!"));
+    }
+
+    window.addEventListener('load', () => { toggleLiveSync(); });
 </script>
 </body>
 </html>
