@@ -5,342 +5,980 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SimMonitor - Spot Vital Signs</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; }
-        body { background: #d1d3d4; color: #333; font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; display: flex; flex-direction: column; position: fixed; }
-        
-        .status-bar { height: 50px; background: #a7a9ac; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; font-size: 0.85rem; font-weight: bold; color: #333; border-bottom: 2px solid #808285; flex-shrink: 0; }
+        :root {
+            --bg: #f2f2f7;
+            --surface: #ffffff;
+            --surface-raised: #f9f9fb;
+            --border: #d1d1d6;
+            --border-subtle: #e5e5ea;
+            --text-primary: #1c1c1e;
+            --text-secondary: #8e8e93;
+            --text-dim: #c7c7cc;
+
+            --green: #34c759;
+            --green-dim: rgba(52, 199, 89, 0.1);
+            --green-glow: rgba(52, 199, 89, 0.35);
+
+            --cyan: #32ade6;
+            --cyan-dim: rgba(50, 173, 230, 0.1);
+            --cyan-glow: rgba(50, 173, 230, 0.35);
+
+            --red: #ff3b30;
+            --red-dim: rgba(255, 59, 48, 0.1);
+            --red-glow: rgba(255, 59, 48, 0.3);
+
+            --purple: #af52de;
+            --purple-dim: rgba(175, 82, 222, 0.1);
+            --purple-glow: rgba(175, 82, 222, 0.35);
+
+            --amber: #ff9500;
+            --amber-dim: rgba(255, 149, 0, 0.1);
+            --amber-glow: rgba(255, 149, 0, 0.3);
+
+            --white: #636366;
+            --white-dim: rgba(99, 99, 102, 0.08);
+            --white-glow: rgba(99, 99, 102, 0.2);
+
+            --alarm-red: #ff2d55;
+            --alarm-bg: rgba(255, 45, 85, 0.1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0; padding: 0;
+            width: 100vw; height: 100vh;
+            overflow: hidden;
+            display: flex; flex-direction: column;
+            position: fixed;
+        }
+
+        /* ===== STATUS BAR ===== */
+        .status-bar {
+            height: 44px;
+            background: var(--surface);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            z-index: 50;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+        }
+
+        .status-left { display: flex; align-items: center; gap: 10px; }
+
+        .connection-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--red);
+            transition: all 0.4s;
+        }
+        .connection-dot.online {
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green-glow);
+        }
+
+        .status-label {
+            font-size: 0.65rem; font-weight: 700;
+            color: var(--text-secondary);
+            letter-spacing: 1.5px; text-transform: uppercase;
+        }
+
         .status-right { display: flex; align-items: center; gap: 12px; }
-        
-        #clock_display { font-family: monospace; font-size: 1.1rem; background: rgba(0,0,0,0.05); padding: 2px 8px; border-radius: 4px; margin-right: 10px; }
 
-        .battery-icon { width: 28px; height: 14px; border: 2px solid #333; border-radius: 3px; position: relative; padding: 1px; }
-        #batt_level { height: 100%; background: #34c759; width: 98%; border-radius: 1px; transition: width 0.5s; }
+        .clock {
+            font-size: 0.75rem; font-weight: 500;
+            color: var(--text-secondary); letter-spacing: 1px;
+        }
+
+        .alarm-badge {
+            display: flex; align-items: center; gap: 5px;
+            padding: 4px 10px; border-radius: 6px;
+            font-size: 0.55rem; font-weight: 800; letter-spacing: 1px;
+            background: var(--surface-raised);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-dim);
+            transition: all 0.3s; cursor: pointer;
+        }
+        .alarm-badge.alarming {
+            background: var(--alarm-bg);
+            border-color: var(--alarm-red);
+            color: var(--alarm-red);
+            animation: badge-pulse 0.8s infinite;
+        }
+        .alarm-badge.silenced {
+            background: var(--amber-dim);
+            border-color: var(--amber);
+            color: var(--amber);
+            animation: none;
+        }
+        .alarm-badge .alarm-icon { font-size: 0.7rem; }
+        @keyframes badge-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        .silence-timer { font-size: 0.55rem; color: var(--amber); font-weight: 700; margin-left: 2px; }
+
+        .icon-btn {
+            width: 32px; height: 32px;
+            background: var(--surface-raised);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+        }
+        .icon-btn:active { transform: scale(0.92); background: var(--border-subtle); }
+        .icon-btn.power {
+            background: var(--red-dim);
+            border-color: rgba(255, 59, 48, 0.25);
+            color: var(--red);
+        }
+
+        .vol-strip { display: flex; align-items: center; gap: 4px; }
+        .vol-strip .icon-btn { width: 28px; height: 28px; font-size: 0.7rem; font-weight: 700; }
+        .vol-label { font-size: 0.55rem; font-weight: 700; color: var(--text-dim); min-width: 28px; text-align: center; }
+
+        /* ===== MAIN CONTENT ===== */
+        .main-content {
+            flex: 1; display: flex; flex-direction: column;
+            padding: 8px; gap: 6px; min-height: 0;
+        }
+
+        /* ===== VITAL CARD ===== */
+        .vital-card {
+            flex: 1;
+            background: var(--surface);
+            border-radius: 12px;
+            border: 1px solid var(--border-subtle);
+            position: relative;
+            display: flex; align-items: center; justify-content: center;
+            min-height: 0; overflow: hidden;
+            transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }
+        .vital-card::before {
+            content: ''; position: absolute; top: 0; left: 0;
+            width: 4px; height: 100%;
+            border-radius: 12px 0 0 12px;
+            transition: background 0.3s, box-shadow 0.3s;
+        }
+        .vital-card.alarm-active {
+            border-color: var(--alarm-red) !important;
+            background: var(--alarm-bg) !important;
+            animation: card-alarm 1s infinite;
+            box-shadow: 0 0 12px rgba(255, 45, 85, 0.15);
+        }
+        @keyframes card-alarm { 0%, 100% { border-color: var(--alarm-red); } 50% { border-color: transparent; } }
         
-        .mini-btn { background: rgba(0,0,0,0.1); border: 1.5px solid rgba(0,0,0,0.15); border-radius: 6px; height: 36px; min-width: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, background 0.1s; }
-        .mini-btn:active { transform: scale(0.92); background: rgba(0,0,0,0.3); }
-        
-        .power-off { background: #ff3b30; color: white; border: none; }
-        .power-off:active { background: #c62828; }
-        
-        .main-content { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; width: 100%; }
-        .vital-card { background: white; border-radius: 15px; padding: 10px 20px; border: 1.5px solid #bcbec0; position: relative; display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; width: 100%; }
-        .bottom-row { display: flex; gap: 8px; flex: 1.2; min-height: 0; width: 100%; }
+        .vital-card.alarm-medium {
+            border-color: var(--amber) !important;
+            background: var(--amber-dim) !important;
+            animation: card-alarm-amber 1.5s infinite;
+        }
+        @keyframes card-alarm-amber {
+            0%, 100% { border-color: var(--amber); }
+            50% { border-color: transparent; }
+        }
+
+        .card-bp { background: var(--surface); }
+        .card-bp::before { background: var(--white); }
+        .card-bp .card-label { color: var(--text-secondary); }
+        .card-bp .card-value.active { color: var(--text-primary); }
+
+        .card-spo2 { background: var(--surface); }
+        .card-spo2::before { background: var(--cyan); box-shadow: 0 0 6px var(--cyan-glow); }
+        .card-spo2 .card-label { color: var(--cyan); }
+        .card-spo2 .card-value.active { color: var(--cyan); text-shadow: 0 0 16px var(--cyan-glow); }
+
+        .card-hr { background: var(--surface); }
+        .card-hr::before { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+        .card-hr .card-label { color: var(--green); }
+        .card-hr .card-value.active { color: var(--green); text-shadow: 0 0 16px var(--green-glow); }
+
+        .card-temp { background: var(--surface); }
+        .card-temp::before { background: var(--purple); box-shadow: 0 0 6px var(--purple-glow); }
+        .card-temp .card-label { color: var(--purple); }
+        .card-temp .card-value.active { color: var(--purple); text-shadow: 0 0 16px var(--purple-glow); }
+
+        .card-label-group {
+            position: absolute; top: 8px; left: 16px;
+            display: flex; align-items: baseline; gap: 6px;
+        }
+        .card-label { font-size: 0.75rem; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; }
+        .card-unit { font-size: 0.55rem; font-weight: 500; color: var(--text-dim); }
+
+        .alarm-limits {
+            position: absolute; top: 8px; right: 14px;
+            text-align: right; font-size: 0.5rem; font-weight: 600;
+            color: var(--text-dim); line-height: 1.3; letter-spacing: 0.5px;
+        }
+        .alarm-limits .limit-high { color: var(--red); opacity: 0.5; }
+        .alarm-limits .limit-low { color: var(--cyan); opacity: 0.5; }
+
+        .card-value {
+            font-size: clamp(2.2rem, 9vh, 6rem);
+            font-weight: 800; color: var(--text-dim);
+            line-height: 1; text-align: center;
+            transition: color 0.4s, text-shadow 0.4s;
+            letter-spacing: -1px;
+        }
+        .card-message { font-size: 1rem; font-weight: 700; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; }
+        .card-timestamp { position: absolute; bottom: 6px; right: 14px; font-size: 0.5rem; font-weight: 500; color: var(--text-dim); letter-spacing: 0.5px; }
+        .card-map { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); font-size: 0.6rem; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.5px; }
+
+        /* ===== PULSE BAR ===== */
+        .pulse-card-inner { display: flex; width: 100%; height: 100%; align-items: center; justify-content: space-between; padding: 0 20px; }
+        .pulse-bar-track {
+            width: 28px; height: 55%;
+            background: var(--border-subtle); border-radius: 6px;
+            display: flex; align-items: flex-end;
+            overflow: hidden; border: 1px solid var(--border);
+            align-self: center;
+        }
+        .pulse-bar-fill {
+            width: 100%; height: 0%;
+            background: linear-gradient(0deg, var(--green) 0%, rgba(52, 199, 89, 0.3) 100%);
+            transition: height 0.1s; border-radius: 0 0 5px 5px;
+        }
+
+        /* ===== BOTTOM ROW ===== */
+        .bottom-row { display: flex; gap: 6px; flex: 1.1; min-height: 0; }
         .bottom-row .vital-card { flex: 1; }
-        
-        #bp_btn { width: 180px; background: #444; color: white; border: none; border-radius: 15px; font-size: 0.95rem; font-weight: 800; cursor: pointer; padding: 10px; flex-shrink: 0; transition: transform 0.1s, background 0.1s; }
-        #bp_btn:active { transform: scale(0.96); background: #222; }
 
-        .label-group { position: absolute; top: 10px; left: 18px; display: flex; align-items: baseline; gap: 6px; }
-        .row-label { font-size: 1.1rem; font-weight: 900; color: #444; text-transform: uppercase; }
-        .row-unit { font-size: 0.75rem; color: #888; font-weight: 700; }
-        
-        .alarm-limits { position: absolute; top: 10px; right: 18px; text-align: right; color: #a7a9ac; font-size: 0.7rem; font-weight: 800; line-height: 1.1; }
+        /* ===== BP BUTTON ===== */
+        .bp-btn {
+            width: 170px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem; font-weight: 800;
+            letter-spacing: 1.5px; cursor: pointer;
+            transition: all 0.15s; flex-shrink: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 8px; text-transform: uppercase;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }
+        .bp-btn:active { transform: scale(0.97); background: var(--surface-raised); }
+        .bp-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .bp-btn .bp-icon { font-size: 1.6rem; opacity: 0.4; transition: opacity 0.3s; }
+        .bp-btn .bp-pressure { font-size: 1.1rem; font-weight: 800; letter-spacing: 0; }
+        .bp-btn.inflating {
+            border-color: var(--red); color: var(--red);
+            background: var(--red-dim);
+            animation: inflate-glow 0.7s infinite;
+        }
+        .bp-btn.inflating .bp-icon { opacity: 1; }
+        .bp-btn.measuring {
+            border-color: var(--amber); color: var(--amber);
+            background: var(--amber-dim);
+            animation: measure-glow 1.2s infinite;
+        }
+        @keyframes inflate-glow {
+            0%, 100% { box-shadow: 0 0 6px var(--red-glow); }
+            50% { box-shadow: 0 0 16px var(--red-glow); }
+        }
+        @keyframes measure-glow {
+            0%, 100% { box-shadow: 0 0 6px var(--amber-glow); }
+            50% { box-shadow: 0 0 14px var(--amber-glow); }
+        }
 
-        .row-value { font-size: clamp(2rem, 10vh, 7rem); font-weight: 900; color: #cccccc; transition: color 0.3s; line-height: 1; text-align: center; }
-        
-        /* CHANGED: Message Color to Grey */
-        .msg-overlay { font-size: 1.3rem; font-weight: 800; color: #888; letter-spacing: 1px; }
-        
-        .hr-active { color: #1b8a4d !important; }
-        .spo2-active { color: #007ead !important; }
-        .temp-active { color: #8e44ad !important; }
-        .bp-active { color: #333 !important; }
-        
-        .pulse-card { display: flex; justify-content: space-between; align-items: center; padding: 10px 25px; }
-        
-        /* CHANGED: Pulse Bar fit */
-        .bar-bg { height: 50%; width: 25px; background: rgba(0,0,0,0.05); border-radius: 4px; display: flex; align-items: flex-end; align-self: flex-end; margin-bottom: 5px; }
-        #pulse_bar { width: 100%; height: 0%; background: #1b8a4d; transition: height 0.1s; }
-        
-        .blinking { animation: blink 1s linear infinite; }
-        @keyframes blink { 50% { opacity: 0.3; } }
-        
-        #standby_screen, #loading_screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
-        .power-btn-main { width: 130px; height: 130px; border-radius: 50%; border: 4px solid #1b8a4d; background: none; color: #1b8a4d; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; margin-bottom: 10px; }
-        .power-btn-main:active { background: #1b8a4d; color: white; transform: scale(0.9); }
-        .power-text { color: #1b8a4d; font-weight: 900; letter-spacing: 4px; font-size: 0.8rem; }
-        
-        .progress-container { width: 300px; height: 12px; background: #333; border-radius: 6px; margin-top: 25px; overflow: hidden; }
-        .progress-bar-fill { width: 0%; height: 100%; background: #0fec7d; transition: width 3s linear; }
+        /* ===== BOTTOM ACTION BAR ===== */
+        .action-bar {
+            height: 52px;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            display: flex; padding: 6px 8px; gap: 6px;
+            flex-shrink: 0;
+        }
+        .action-btn {
+            flex: 1;
+            background: var(--surface-raised);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.5rem; font-weight: 700;
+            letter-spacing: 1px; text-transform: uppercase;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 2px; cursor: pointer; transition: all 0.15s;
+        }
+        .action-btn:active { transform: scale(0.95); background: var(--border-subtle); }
+        .action-btn .action-icon { font-size: 1rem; }
+        .action-btn .action-label { font-size: 0.45rem; }
+        .action-btn.silence-btn.alarming {
+            background: var(--alarm-bg);
+            border-color: var(--alarm-red); color: var(--alarm-red);
+            animation: silence-available 1.2s infinite;
+        }
+        .action-btn.silence-btn.silenced {
+            background: var(--amber-dim);
+            border-color: var(--amber); color: var(--amber);
+            animation: none;
+        }
+        .action-btn.silence-btn.silenced .silence-countdown { font-size: 0.65rem; font-weight: 800; }
+        @keyframes silence-available {
+            0%, 100% { box-shadow: 0 0 6px var(--red-glow); }
+            50% { box-shadow: 0 0 14px var(--red-glow); }
+        }
+        .action-btn.fullscreen-btn:active { border-color: var(--text-secondary); color: var(--text-secondary); }
+
+        /* ===== BLINKING ===== */
+        .blinking { animation: blink-value 1s linear infinite; }
+        @keyframes blink-value { 50% { opacity: 0.2; } }
+
+        /* ===== STARTUP / STANDBY (dark boot screen) ===== */
+        .overlay-screen {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: #0a0a0e;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 1000; transition: opacity 0.5s;
+        }
+        .overlay-screen.fade-out { opacity: 0; pointer-events: none; }
+
+        .power-ring {
+            width: 120px; height: 120px; border-radius: 50%;
+            border: 2px solid #2a2a35;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.3s; position: relative;
+        }
+        .power-ring::after {
+            content: ''; position: absolute; inset: -6px;
+            border-radius: 50%; border: 1px solid transparent; transition: all 0.5s;
+        }
+        .power-ring:hover { border-color: #34c759; }
+        .power-ring:hover::after { border-color: rgba(52, 199, 89, 0.3); }
+        .power-ring:active { transform: scale(0.94); }
+        .power-ring.active { border-color: #34c759; box-shadow: 0 0 40px rgba(52, 199, 89, 0.3); }
+        .power-ring .icon { font-size: 36px; color: #44444f; transition: color 0.3s; }
+        .power-ring.active .icon { color: #34c759; }
+
+        .power-text { margin-top: 20px; font-size: 0.65rem; font-weight: 800; letter-spacing: 4px; color: #44444f; transition: color 0.3s; }
+        .power-text.active { color: #34c759; }
+
+        .startup-msg { margin-top: 30px; font-size: 0.6rem; font-weight: 600; color: #34c759; letter-spacing: 2px; opacity: 0; transition: opacity 0.3s; }
+        .startup-msg.visible { opacity: 1; }
+
+        .progress-track { width: 220px; height: 2px; background: #2a2a35; border-radius: 2px; margin-top: 16px; overflow: hidden; opacity: 0; transition: opacity 0.3s; }
+        .progress-track.visible { opacity: 1; }
+        .progress-fill { height: 100%; width: 0%; background: #34c759; box-shadow: 0 0 10px rgba(52, 199, 89, 0.3); transition: width 3s linear; }
+
+        .brand-label { position: absolute; bottom: 36px; font-size: 0.5rem; font-weight: 600; letter-spacing: 4px; color: #2a2a35; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
+<!-- ===== STANDBY SCREEN ===== -->
+<div class="overlay-screen" id="standby_screen">
+    <div class="power-ring" id="power_ring" onclick="startBoot()">
+        <svg class="icon" viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+            <line x1="12" y1="2" x2="12" y2="12"></line>
+        </svg>
+    </div>
+    <div class="power-text" id="power_text">POWER ON</div>
+    <div class="startup-msg" id="startup_msg">INITIALIZING SYSTEM...</div>
+    <div class="progress-track" id="progress_track">
+        <div class="progress-fill" id="progress_fill"></div>
+    </div>
+    <div class="brand-label">SIMMONITOR PRO — SPOT CHECK</div>
+</div>
+
+<!-- ===== LOADING SCREEN ===== -->
+<div class="overlay-screen" id="loading_screen" style="display:none;">
+    <div class="startup-msg visible" id="loading_msg" style="opacity:1;">CALIBRATING SENSORS...</div>
+    <div class="progress-track visible" style="opacity:1;">
+        <div class="progress-fill" id="loading_fill"></div>
+    </div>
+</div>
+
+<!-- ===== STATUS BAR ===== -->
 <div class="status-bar">
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
-        <span id="sys_status_text" style="font-size: 0.9rem;">SYSTEM READY</span>
+    <div class="status-left">
+        <div class="connection-dot" id="conn_dot"></div>
+        <span class="status-label" id="sys_status_text">OFFLINE</span>
     </div>
-    
     <div class="status-right">
-        <div id="clock_display">00:00</div>
-        <button class="mini-btn" onclick="adjustVol(-0.1)" aria-label="Decrease Volume">−</button>
-        <button class="mini-btn" id="mute_btn" onclick="toggleMute()" style="min-width: 44px;">
-            <svg id="vol_icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-        </button>
-        <button class="mini-btn" onclick="adjustVol(0.1)" aria-label="Increase Volume">+</button>
-        <span id="vol_label" style="font-size: 0.75rem; margin-left: 5px; width: 30px;">50%</span>
-
-        <div class="battery-icon"><div id="batt_level"></div></div>
-        <button class="mini-btn power-off" id="mon_power_btn" onclick="location.reload()">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+        <div class="alarm-badge" id="alarm_badge">
+            <span class="alarm-icon" id="alarm_icon">🔔</span>
+            <span id="alarm_text">NO ALARMS</span>
+            <span class="silence-timer" id="silence_timer"></span>
+        </div>
+        <div class="vol-strip">
+            <button class="icon-btn" onclick="adjustVol(-0.1)" style="font-size:0.65rem;">−</button>
+            <span class="vol-label" id="vol_label">50%</span>
+            <button class="icon-btn" onclick="adjustVol(0.1)" style="font-size:0.65rem;">+</button>
+        </div>
+        <span class="clock" id="clock_display">00:00</span>
+        <button class="icon-btn power" onclick="location.reload()">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
         </button>
     </div>
 </div>
 
-<div id="standby_screen">
-    <button class="power-btn-main" id="start_btn" onclick="startBoot()">
-        <svg viewBox="0 0 24 24" width="70" height="70" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
-    </button>
-    <div class="power-text">POWER</div>
-</div>
-
-<div id="loading_screen" style="display:none; color:white; font-weight: bold; letter-spacing: 2px;">
-    INITIALIZING...
-    <div class="progress-container"><div class="progress-bar-fill" id="p_bar"></div></div>
-</div>
-
+<!-- ===== VITALS GRID ===== -->
 <div class="main-content">
-    <div class="vital-card">
-        <div class="label-group"><span class="row-label">SYS</span><span class="row-unit">mmHg</span></div>
-        <div class="alarm-limits">140<br>90</div>
-        <div class="row-value" id="sys_v">---</div>
+    <div class="vital-card card-bp" id="card_sys">
+        <div class="card-label-group"><span class="card-label">SYS</span><span class="card-unit">mmHg</span></div>
+        <div class="alarm-limits"><span class="limit-high">▲ 140</span><br><span class="limit-low">▼ 90</span></div>
+        <div class="card-value" id="sys_v">---</div>
+        <div class="card-timestamp" id="sys_timestamp"></div>
     </div>
-    <div class="vital-card">
-        <div class="label-group"><span class="row-label">DIA</span><span class="row-unit">mmHg</span></div>
-        <div class="alarm-limits">90<br>60</div>
-        <div class="row-value" id="dia_v">---</div>
+    <div class="vital-card card-bp" id="card_dia">
+        <div class="card-label-group"><span class="card-label">DIA</span><span class="card-unit">mmHg</span></div>
+        <div class="alarm-limits"><span class="limit-high">▲ 90</span><br><span class="limit-low">▼ 60</span></div>
+        <div class="card-value" id="dia_v">---</div>
+        <div class="card-map" id="map_display"></div>
+        <div class="card-timestamp" id="dia_timestamp"></div>
     </div>
-    <div class="vital-card">
-        <div class="label-group"><span class="row-label">SpO2</span><span class="row-unit">%</span></div>
-        <div class="alarm-limits"><br>90</div>
-        <div class="row-value" id="spo2_v">---</div>
+    <div class="vital-card card-spo2" id="card_spo2">
+        <div class="card-label-group"><span class="card-label">SpO₂</span><span class="card-unit">%</span></div>
+        <div class="alarm-limits"><span class="limit-low">▼ 90</span></div>
+        <div class="card-value" id="spo2_v">---</div>
     </div>
-    <div class="vital-card pulse-card">
-        <div class="label-group"><span class="row-label">Pulse</span><span class="row-unit">bpm</span></div>
-        <div class="alarm-limits">120<br>50</div>
-        <div class="row-value" id="hr_v">---</div>
-        <div class="bar-bg"><div id="pulse_bar"></div></div>
+    <div class="vital-card card-hr" id="card_hr">
+        <div class="card-label-group"><span class="card-label">PULSE</span><span class="card-unit">bpm</span></div>
+        <div class="alarm-limits"><span class="limit-high">▲ 120</span><br><span class="limit-low">▼ 50</span></div>
+        <div class="pulse-card-inner">
+            <div class="card-value" id="hr_v">---</div>
+            <div class="pulse-bar-track"><div class="pulse-bar-fill" id="pulse_bar"></div></div>
+        </div>
     </div>
     <div class="bottom-row">
-        <div class="vital-card">
-            <div class="label-group"><span class="row-label">Temp</span><span class="row-unit">°C</span></div>
-            <div class="row-value" id="temp_v">--.-</div>
+        <div class="vital-card card-temp" id="card_temp">
+            <div class="card-label-group"><span class="card-label">TEMP</span><span class="card-unit">°C</span></div>
+            <div class="alarm-limits"><span class="limit-high">▲ 38.5</span><br><span class="limit-low">▼ 35.0</span></div>
+            <div class="card-value" id="temp_v">--.-</div>
         </div>
-        <button id="bp_btn" onclick="runBP()">START BP CYCLE</button>
+        <button class="bp-btn" id="bp_btn" onclick="runBP()">
+            <span class="bp-icon">⊘</span>
+            START BP
+        </button>
+    </div>
+</div>
+
+<!-- ===== BOTTOM ACTION BAR ===== -->
+<div class="action-bar">
+    <div class="action-btn silence-btn" id="silence_btn" onclick="toggleSilence()">
+        <span class="action-icon" id="silence_icon">🔔</span>
+        <span class="action-label" id="silence_label">ALARMS</span>
+        <span class="silence-countdown" id="silence_countdown"></span>
+    </div>
+    <div class="action-btn fullscreen-btn" onclick="toggleFullscreen()">
+        <span class="action-icon">⛶</span>
+        <span class="action-label">FULLSCREEN</span>
     </div>
 </div>
 
 <script>
-    var socket = io({ transports: ['websocket'], upgrade: false });
+var socket = io({ transports: ['websocket'], upgrade: false });
 
-    let targetHR = 60, targetSpO2 = 98, t_sys = 120, t_dia = 80;
-    let hr_on = false, spo2_on = false, bp_attached = false, cycling = false, signalQuality = 'normal';
-    
-    // Calculation state (for delay logic)
-    let calc_hr = false, calc_spo2 = false;
+// ==================== STATE ====================
+var targetHR = 60, targetSpO2 = 98, t_sys = 120, t_dia = 80;
+var hr_on = false, spo2_on = false, bp_attached = false, cycling = false, signalQuality = 'normal';
+var calc_hr = false, calc_spo2 = false;
+var hrDrift = 0, spo2Drift = 0;
+var masterVolume = 0.5;
+var isMuted = false;
+var isLoopRunning = false;
 
-    let hrDrift = 0, spo2Drift = 0;
-    let masterVolume = 0.5; 
-    let isMuted = false;
-    let isLoopRunning = false;
+// ==================== ALARM STATE ====================
+var alarmsSilenced = false;
+var silenceCountdown = 0;
+var silenceInterval = null;
+var alarmLimits = {
+    hr_high: 120, hr_low: 50,
+    spo2_low: 90,
+    sys_high: 140, sys_low: 90,
+    dia_high: 90, dia_low: 60,
+    temp_high: 38.5, temp_low: 35.0
+};
+var currentAlarms = { hr: false, spo2: false, sys: false, dia: false, temp: false };
+var lastAlarmTone = 0;
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomCode = urlParams.get('room');
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+var urlParams = new URLSearchParams(window.location.search);
+var roomCode = urlParams.get('room');
+var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    function updateClock() {
-        const now = new Date();
-        document.getElementById('clock_display').innerText = now.getHours().toString().padStart(2,'0') + ":" + now.getMinutes().toString().padStart(2,'0');
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
+// ==================== UTILITIES ====================
+function calculateMAP(sys, dia) { return Math.round((parseInt(sys) + 2 * parseInt(dia)) / 3); }
+function getCurrentTimestamp() {
+    var now = new Date();
+    return now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+}
 
-    function adjustVol(amt) {
-        masterVolume = Math.min(1.0, Math.max(0, masterVolume + amt));
-        updateVolUI();
-    }
+function updateClock() {
+    var now = new Date();
+    document.getElementById('clock_display').innerText =
+        now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+}
+setInterval(updateClock, 1000);
+updateClock();
 
-    function toggleMute() {
-        isMuted = !isMuted;
-        const icon = document.getElementById('vol_icon');
-        if(isMuted) {
-            icon.innerHTML = '<line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9l-5 5H2v-4h2l5-5z"></path><path d="M11 5v14"></path>';
-        } else {
-            icon.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>';
-        }
-        updateVolUI();
-    }
+// ==================== VOLUME ====================
+function adjustVol(amt) {
+    masterVolume = Math.min(1.0, Math.max(0, masterVolume + amt));
+    isMuted = masterVolume === 0;
+    document.getElementById('vol_label').innerText = isMuted ? 'OFF' : Math.round(masterVolume * 100) + '%';
+}
 
-    function updateVolUI() {
-        const display = isMuted ? "OFF" : Math.round(masterVolume * 100) + "%";
-        document.getElementById('vol_label').innerText = display;
-    }
+// ==================== ALARM SYSTEM ====================
+function checkAlarms() {
+    var anyAlarm = false;
 
-    function startBoot() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => console.log("Fullscreen blocked"));
-        }
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        document.getElementById('standby_screen').style.display = 'none';
-        document.getElementById('loading_screen').style.display = 'flex';
-        socket.emit('monitor_powered_on', { room: roomCode });
-        setTimeout(() => { document.getElementById('p_bar').style.width = '100%'; }, 100);
-        setTimeout(() => {
-            document.getElementById('loading_screen').style.display = 'none';
-            // Trigger initial update to show "CONNECT SENSOR"
-            updateDisplay();
-            runAnimationLoop(); 
-            startDriftTimer();
-        }, 3000); 
-    }
+    if (hr_on && !calc_hr && targetHR > 0) {
+        var hr = parseInt(targetHR) + hrDrift;
+        currentAlarms.hr = hr > alarmLimits.hr_high || hr < alarmLimits.hr_low;
+    } else { currentAlarms.hr = false; }
 
-    socket.on('connect', () => {
-        socket.emit('join', { room: roomCode, type: 'monitor' });
+    if (spo2_on && !calc_spo2 && targetHR > 0) {
+        var spo2 = Math.min(100, parseInt(targetSpO2) + spo2Drift);
+        currentAlarms.spo2 = spo2 < alarmLimits.spo2_low;
+    } else { currentAlarms.spo2 = false; }
+
+    var tempEl = document.getElementById('temp_v');
+    var tempVal = parseFloat(tempEl.innerText);
+    if (!isNaN(tempVal) && tempVal > 10) {
+        currentAlarms.temp = tempVal > alarmLimits.temp_high || tempVal < alarmLimits.temp_low;
+    } else { currentAlarms.temp = false; }
+
+    if (bp_attached && !cycling) {
+        var sysEl = document.getElementById('sys_v');
+        var diaEl = document.getElementById('dia_v');
+        var sysVal = parseInt(sysEl.innerText);
+        var diaVal = parseInt(diaEl.innerText);
+        if (!isNaN(sysVal) && sysVal > 0) {
+            currentAlarms.sys = sysVal > alarmLimits.sys_high || sysVal < alarmLimits.sys_low;
+            currentAlarms.dia = diaVal > alarmLimits.dia_high || diaVal < alarmLimits.dia_low;
+        } else { currentAlarms.sys = false; currentAlarms.dia = false; }
+    } else { currentAlarms.sys = false; currentAlarms.dia = false; }
+
+    var priority = getAlarmPriority();
+    var highClass = 'alarm-active';
+    var medClass = 'alarm-medium';
+
+    // Clear both classes first
+    ['card_hr','card_spo2','card_temp','card_sys','card_dia'].forEach(function(id) {
+        document.getElementById(id).classList.remove(highClass, medClass);
     });
 
-    function updateDisplay() {
-        const hrEl = document.getElementById('hr_v');
-        const spo2El = document.getElementById('spo2_v');
-        const sysEl = document.getElementById('sys_v');
-        const diaEl = document.getElementById('dia_v');
+    var cls = (priority === 'high') ? highClass : medClass;
+    if (currentAlarms.hr)   document.getElementById('card_hr').classList.add(cls);
+    if (currentAlarms.spo2) document.getElementById('card_spo2').classList.add(cls);
+    if (currentAlarms.temp) document.getElementById('card_temp').classList.add(cls);
+    if (currentAlarms.sys)  document.getElementById('card_sys').classList.add(cls);
+    if (currentAlarms.dia)  document.getElementById('card_dia').classList.add(cls);
 
-        // HR Logic with Delay
-        if (hr_on) {
-            if (calc_hr) {
-                hrEl.innerText = "---";
-                hrEl.className = "row-value blinking";
-            } else {
-                let dHR = Math.max(0, parseInt(targetHR) + hrDrift);
-                hrEl.innerText = (targetHR > 0) ? dHR : 0;
-                hrEl.className = "row-value hr-active";
-            }
-        } else {
-            hrEl.innerText = "CONNECT SENSOR";
-            hrEl.className = "row-value msg-overlay";
-        }
+    for (var k in currentAlarms) { if (currentAlarms[k]) anyAlarm = true; }
 
-        // SpO2 Logic with Delay
-        if (spo2_on) {
-            if (calc_spo2) {
-                spo2El.innerText = "---";
-                spo2El.className = "row-value blinking";
-            } else {
-                let dSPO2 = Math.min(100, Math.max(0, parseInt(targetSpO2) + spo2Drift));
-                spo2El.innerText = (targetHR > 0) ? dSPO2 : 0;
-                spo2El.className = "row-value spo2-active";
-            }
-        } else {
-            spo2El.innerText = "CONNECT SENSOR";
-            spo2El.className = "row-value msg-overlay";
-        }
+    var badge = document.getElementById('alarm_badge');
+    var icon = document.getElementById('alarm_icon');
+    var text = document.getElementById('alarm_text');
+    var silBtn = document.getElementById('silence_btn');
+    var silIcon = document.getElementById('silence_icon');
+    var silLabel = document.getElementById('silence_label');
 
-        // BP Logic
-        if (!bp_attached && !cycling) {
-            sysEl.innerText = "ATTACH CUFF";
-            sysEl.className = "row-value msg-overlay";
-            diaEl.innerText = "ATTACH CUFF";
-            diaEl.className = "row-value msg-overlay";
-        }
+    if (anyAlarm && !alarmsSilenced) {
+        badge.className = 'alarm-badge alarming';
+        icon.innerText = '🔔'; text.innerText = 'ALARM';
+        silBtn.className = 'action-btn silence-btn alarming';
+        silIcon.innerText = '🔕'; silLabel.innerText = 'SILENCE';
+        document.getElementById('silence_countdown').innerText = '';
+    } else if (anyAlarm && alarmsSilenced) {
+        badge.className = 'alarm-badge silenced';
+        icon.innerText = '🔕'; text.innerText = 'SILENCED';
+        silBtn.className = 'action-btn silence-btn silenced';
+        silIcon.innerText = '🔕'; silLabel.innerText = '';
+    } else {
+        badge.className = 'alarm-badge';
+        icon.innerText = '🔔'; text.innerText = 'NO ALARMS';
+        silBtn.className = 'action-btn silence-btn';
+        silIcon.innerText = '🔔'; silLabel.innerText = 'ALARMS';
+        document.getElementById('silence_countdown').innerText = '';
+        if (alarmsSilenced) cancelSilence();
     }
 
-    function playBeep() {
-        if (!hr_on || targetHR <= 0 || isMuted || calc_hr) return;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        let freq = (hr_on && spo2_on) ? 400 + (targetSpO2 * 5.6) : 800;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(masterVolume * 0.1, audioCtx.currentTime + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+    var now = Date.now();
+    var priority = getAlarmPriority();
+    var repeatInterval = (priority === 'high') ? 3000 : 5000;
+    if (anyAlarm && !alarmsSilenced && !isMuted && now - lastAlarmTone > repeatInterval) {
+        playAlarmTone();
+        lastAlarmTone = now;
     }
+}
 
-    function runAnimationLoop() {
-        if (isLoopRunning) return;
-        isLoopRunning = true;
-        const animate = () => {
-            // Only pulse if connected and not calculating
-            if(hr_on && targetHR > 0 && !calc_hr) {
-                let h = (signalQuality === 'poor') ? (Math.random() * 45 + 15) + "%" : "100%";
-                const bar = document.getElementById('pulse_bar');
-                if (bar) bar.style.height = h;
-                playBeep();
-                setTimeout(() => { if (bar) bar.style.height = "0%"; }, 150);
-                let interval = (60 / targetHR) * 1000;
-                setTimeout(animate, interval);
-            } else {
-                const bar = document.getElementById('pulse_bar');
-                if (bar) bar.style.height = "0%";
-                setTimeout(animate, 1000);
-            }
-        };
-        animate();
+function toggleSilence() {
+    var anyAlarm = false;
+    for (var k in currentAlarms) { if (currentAlarms[k]) anyAlarm = true; }
+    if (!anyAlarm) return;
+    if (alarmsSilenced) { cancelSilence(); }
+    else {
+        alarmsSilenced = true;
+        silenceCountdown = 120;
+        updateSilenceDisplay();
+        if (silenceInterval) clearInterval(silenceInterval);
+        silenceInterval = setInterval(function() {
+            silenceCountdown--;
+            updateSilenceDisplay();
+            if (silenceCountdown <= 0) cancelSilence();
+        }, 1000);
     }
+}
 
-    function startDriftTimer() {
-        setInterval(() => {
-            if (hr_on && targetHR > 0) {
-                hrDrift = Math.floor(Math.random() * 5) - 2;
-                spo2Drift = Math.floor(Math.random() * 3) - 1;
+function cancelSilence() {
+    alarmsSilenced = false;
+    silenceCountdown = 0;
+    if (silenceInterval) { clearInterval(silenceInterval); silenceInterval = null; }
+    document.getElementById('silence_timer').innerText = '';
+}
+
+function updateSilenceDisplay() {
+    var mins = Math.floor(silenceCountdown / 60);
+    var secs = silenceCountdown % 60;
+    var timeStr = mins + ':' + (secs < 10 ? '0' : '') + secs;
+    document.getElementById('silence_timer').innerText = timeStr;
+    document.getElementById('silence_countdown').innerText = timeStr;
+    // IEC: periodic reminder beep while silenced
+    if (silenceCountdown % 30 === 0 && silenceCountdown > 0 && !isMuted) {
+        playAlarmPulse(330, 0.1, 0.08, 0);
+    }
+}
+
+// ==================== IEC 60601-1-8 ALARM SYSTEM ====================
+function getAlarmPriority() {
+    // HIGH: life-threatening
+    var hr = parseInt(targetHR) + hrDrift;
+    if (hr_on && !calc_hr && targetHR == 0) return 'high';                    // asystole
+    if (spo2_on && !calc_spo2 && (parseInt(targetSpO2) + spo2Drift) < 80) return 'high'; // critical desat
+    var sysVal = parseInt(document.getElementById('sys_v').innerText);
+    if (!isNaN(sysVal) && sysVal > 0 && sysVal < 60) return 'high';          // severe hypotension
+
+    // MEDIUM: out of range
+    if (currentAlarms.hr || currentAlarms.spo2 || currentAlarms.sys || currentAlarms.dia || currentAlarms.temp) return 'medium';
+
+    return 'none';
+}
+
+function playAlarmPulse(freq, duration, volume, delay) {
+    // IEC compliant pulse: fundamental + harmonics, 10ms rise/fall
+    setTimeout(function() {
+        var fundamental = audioCtx.createOscillator();
+        var h2 = audioCtx.createOscillator();
+        var h3 = audioCtx.createOscillator();
+        var h4 = audioCtx.createOscillator();
+        var gain = audioCtx.createGain();
+
+        fundamental.frequency.value = freq;
+        h2.frequency.value = freq * 2;
+        h3.frequency.value = freq * 3;
+        h4.frequency.value = freq * 4;
+
+        // Mix harmonics slightly quieter than fundamental
+        var mix = audioCtx.createGain();
+        mix.gain.value = 0.6;
+
+        fundamental.connect(gain);
+        h2.connect(mix); h3.connect(mix); h4.connect(mix);
+        mix.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        var t = audioCtx.currentTime;
+        var vol = volume * masterVolume;
+        // 10ms rise, sustain, 10ms fall (IEC: rise ≥ 10ms)
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.linearRampToValueAtTime(vol, t + 0.01);
+        gain.gain.setValueAtTime(vol, t + duration - 0.01);
+        gain.gain.linearRampToValueAtTime(0.0001, t + duration);
+
+        [fundamental, h2, h3, h4].forEach(function(o) { o.start(t); o.stop(t + duration); });
+    }, delay);
+}
+
+function playAlarmTone() {
+    var priority = getAlarmPriority();
+    if (priority === 'none') return;
+
+    if (priority === 'high') {
+        // HIGH: 10 pulses grouped 5+5, short pulses (50ms), fast spacing
+        // Group 1: 5 pulses
+        for (var i = 0; i < 5; i++) {
+            playAlarmPulse(480, 0.05, 0.25, i * 100);
+        }
+        // Brief gap (150ms) then Group 2: 5 pulses
+        for (var j = 0; j < 5; j++) {
+            playAlarmPulse(480, 0.05, 0.25, 650 + j * 100);
+        }
+    } else if (priority === 'medium') {
+        // MEDIUM: 3 pulses, moderate duration (150ms), moderate spacing
+        for (var k = 0; k < 3; k++) {
+            playAlarmPulse(440, 0.15, 0.18, k * 300);
+        }
+    }
+}
+
+// ==================== BOOT ====================
+function startBoot() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(function(){});
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    var ring = document.getElementById('power_ring');
+    var ptxt = document.getElementById('power_text');
+    var msg = document.getElementById('startup_msg');
+    var track = document.getElementById('progress_track');
+    var fill = document.getElementById('progress_fill');
+
+    ring.classList.add('active');
+    ptxt.classList.add('active');
+    ptxt.innerText = 'POWERING ON';
+
+    setTimeout(function() {
+        msg.classList.add('visible');
+        track.classList.add('visible');
+        fill.style.width = '100%';
+
+        var msgs = ['LOADING MODULES...', 'CALIBRATING SENSORS...', 'CONNECTING...', 'READY'];
+        msgs.forEach(function(m, i) {
+            setTimeout(function() { msg.innerText = m; }, (i + 1) * 700);
+        });
+
+        setTimeout(function() {
+            document.getElementById('standby_screen').classList.add('fade-out');
+            setTimeout(function() {
+                document.getElementById('standby_screen').style.display = 'none';
                 updateDisplay();
-            }
-        }, 10000);
+                runAnimationLoop();
+                startDriftTimer();
+            }, 500);
+        }, 3200);
+    }, 300);
+
+    socket.emit('monitor_powered_on', { room: roomCode });
+}
+
+// ==================== DISPLAY ====================
+function updateDisplay() {
+    var hrEl = document.getElementById('hr_v');
+    var spo2El = document.getElementById('spo2_v');
+    var sysEl = document.getElementById('sys_v');
+    var diaEl = document.getElementById('dia_v');
+
+    if (hr_on) {
+        if (calc_hr) {
+            hrEl.innerText = '---';
+            hrEl.className = 'card-value blinking';
+        } else {
+            var dHR = Math.max(0, parseInt(targetHR) + hrDrift);
+            hrEl.innerText = (targetHR > 0) ? dHR : 0;
+            hrEl.className = 'card-value active';
+        }
+    } else {
+        hrEl.innerHTML = '<span class="card-message">CONNECT</span>';
+        hrEl.className = 'card-value';
     }
 
-    socket.on('update_monitor', (data) => {
-        if (data.type === 'vitals') {
-            targetHR = data.hr; targetSpO2 = data.spo2;
-            
-            // Check for new connections to trigger delay
-            if (data.hr_conn && !hr_on) {
-                calc_hr = true;
-                setTimeout(() => { calc_hr = false; updateDisplay(); }, 2000);
-            }
-            if (data.spo2_conn && !spo2_on) {
-                calc_spo2 = true;
-                setTimeout(() => { calc_spo2 = false; updateDisplay(); }, 2000);
-            }
+    if (spo2_on) {
+        if (calc_spo2) {
+            spo2El.innerText = '---';
+            spo2El.className = 'card-value blinking';
+        } else {
+            var dSPO2 = Math.min(100, Math.max(0, parseInt(targetSpO2) + spo2Drift));
+            spo2El.innerText = (targetHR > 0) ? dSPO2 : 0;
+            spo2El.className = 'card-value active';
+        }
+    } else {
+        spo2El.innerHTML = '<span class="card-message">CONNECT</span>';
+        spo2El.className = 'card-value';
+    }
 
-            hr_on = data.hr_conn; 
-            spo2_on = data.spo2_conn;
-            signalQuality = data.signal_quality || 'normal';
-            updateDisplay(); 
-        } 
-        else if (data.type === 'system_reset') location.reload();
-        else if (data.type === 'push_temp') {
-            document.getElementById('temp_v').innerText = parseFloat(data.temp).toFixed(1);
-            document.getElementById('temp_v').className = "row-value temp-active";
-        } 
-        else if (data.type === 'set_target_bp') {
-            t_sys = data.sys; t_dia = data.dia;
-            bp_attached = data.bp_conn;
+    if (!bp_attached && !cycling) {
+        sysEl.innerHTML = '<span class="card-message">NO CUFF</span>';
+        sysEl.className = 'card-value';
+        diaEl.innerHTML = '<span class="card-message">NO CUFF</span>';
+        diaEl.className = 'card-value';
+        document.getElementById('map_display').innerText = '';
+        document.getElementById('sys_timestamp').innerText = '';
+        document.getElementById('dia_timestamp').innerText = '';
+    }
+
+    checkAlarms();
+}
+
+// ==================== BEEP ====================
+function playBeep() {
+    if (!hr_on || targetHR <= 0 || isMuted || calc_hr) return;
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    var freq = (hr_on && spo2_on) ? 400 + (targetSpO2 * 5.6) : 800;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(masterVolume * 0.1, audioCtx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+}
+
+// ==================== ANIMATION LOOP ====================
+function runAnimationLoop() {
+    if (isLoopRunning) return;
+    isLoopRunning = true;
+    var animate = function() {
+        if (hr_on && targetHR > 0 && !calc_hr) {
+            var h = (signalQuality === 'poor') ? (Math.random() * 45 + 15) + '%' : '100%';
+            var bar = document.getElementById('pulse_bar');
+            if (bar) bar.style.height = h;
+            playBeep();
+            setTimeout(function() { if (bar) bar.style.height = '0%'; }, 150);
+            var interval = (60 / targetHR) * 1000;
+            setTimeout(animate, interval);
+        } else {
+            var bar = document.getElementById('pulse_bar');
+            if (bar) bar.style.height = '0%';
+            setTimeout(animate, 1000);
+        }
+    };
+    animate();
+}
+
+function startDriftTimer() {
+    setInterval(function() {
+        if (hr_on && targetHR > 0) {
+            hrDrift = Math.floor(Math.random() * 5) - 2;
+            spo2Drift = Math.floor(Math.random() * 3) - 1;
             updateDisplay();
         }
-    });
+    }, 10000);
+}
 
-    function runBP() {
-        if (cycling || !bp_attached) return; 
-        cycling = true;
-        const btn = document.getElementById('bp_btn');
-        btn.innerText = "INFLATING CUFF..."; // Changed Text
-        document.getElementById('sys_v').innerText = "---";
-        document.getElementById('dia_v').innerText = "---";
-        document.getElementById('sys_v').className = "row-value blinking";
-        document.getElementById('dia_v').className = "row-value blinking";
-        
-        setTimeout(() => {
-            document.getElementById('sys_v').classList.remove('blinking');
-            document.getElementById('dia_v').classList.remove('blinking');
-            document.getElementById('sys_v').innerText = t_sys;
-            document.getElementById('dia_v').innerText = t_dia;
-            document.getElementById('sys_v').className = "row-value bp-active";
-            document.getElementById('dia_v').className = "row-value bp-active";
-            btn.innerText = "START BP CYCLE"; cycling = false;
-        }, 8000);
+// ==================== SOCKET ====================
+socket.on('connect', function() {
+    socket.emit('join', { room: roomCode, type: 'monitor' });
+    document.getElementById('conn_dot').classList.add('online');
+    document.getElementById('sys_status_text').innerText = 'CONNECTED';
+    document.getElementById('sys_status_text').style.color = 'var(--green)';
+});
+
+socket.on('disconnect', function() {
+    document.getElementById('conn_dot').classList.remove('online');
+    document.getElementById('sys_status_text').innerText = 'OFFLINE';
+    document.getElementById('sys_status_text').style.color = 'var(--text-secondary)';
+});
+
+socket.on('connect_error', function() {
+    document.getElementById('sys_status_text').innerText = 'ERROR';
+    document.getElementById('sys_status_text').style.color = 'var(--red)';
+});
+
+socket.on('update_monitor', function(data) {
+    if (data.type === 'vitals') {
+        targetHR = data.hr;
+        targetSpO2 = data.spo2;
+
+        if (data.hr_conn && !hr_on) {
+            calc_hr = true;
+            setTimeout(function() { calc_hr = false; updateDisplay(); }, 2000);
+        }
+        if (data.spo2_conn && !spo2_on) {
+            calc_spo2 = true;
+            setTimeout(function() { calc_spo2 = false; updateDisplay(); }, 2000);
+        }
+
+        hr_on = data.hr_conn;
+        spo2_on = data.spo2_conn;
+        signalQuality = data.signal_quality || 'normal';
+        updateDisplay();
     }
+    else if (data.type === 'system_reset') { location.reload(); }
+    else if (data.type === 'push_temp') {
+        var tempEl = document.getElementById('temp_v');
+        tempEl.innerText = parseFloat(data.temp).toFixed(1);
+        tempEl.className = 'card-value active';
+        checkAlarms();
+    }
+    else if (data.type === 'set_target_bp') {
+        t_sys = data.sys;
+        t_dia = data.dia;
+        bp_attached = data.bp_conn;
+        updateDisplay();
+    }
+});
+
+// ==================== BP CYCLE ====================
+function runBP() {
+    if (cycling || !bp_attached) return;
+    cycling = true;
+
+    var btn = document.getElementById('bp_btn');
+    var sysEl = document.getElementById('sys_v');
+    var diaEl = document.getElementById('dia_v');
+
+    btn.disabled = true;
+    sysEl.innerText = '---';
+    diaEl.innerText = '---';
+    sysEl.className = 'card-value blinking';
+    diaEl.className = 'card-value blinking';
+    btn.classList.add('inflating');
+    btn.classList.remove('measuring');
+
+    var pressure = 0;
+    var inflateInterval = setInterval(function() {
+        pressure += 15;
+        btn.innerHTML = '<span class="bp-icon">⊘</span><span class="bp-pressure">' + pressure + '</span>mmHg';
+        if (pressure >= 180) {
+            clearInterval(inflateInterval);
+            btn.classList.remove('inflating');
+            btn.classList.add('measuring');
+            btn.innerHTML = '<span class="bp-icon">⊘</span><span class="bp-pressure">READING</span>';
+
+            setTimeout(function() {
+                sysEl.classList.remove('blinking');
+                diaEl.classList.remove('blinking');
+                sysEl.innerText = t_sys;
+                diaEl.innerText = t_dia;
+                sysEl.className = 'card-value active';
+                diaEl.className = 'card-value active';
+
+                var map = calculateMAP(t_sys, t_dia);
+                document.getElementById('map_display').innerText = 'MAP ' + map;
+                var ts = getCurrentTimestamp();
+                document.getElementById('sys_timestamp').innerText = ts;
+                document.getElementById('dia_timestamp').innerText = ts;
+
+                btn.classList.remove('measuring');
+                btn.innerHTML = '<span class="bp-icon">⊘</span>START BP';
+                btn.disabled = false;
+                cycling = false;
+                checkAlarms();
+            }, 3000);
+        }
+    }, 300);
+}
+
+// ==================== FULLSCREEN ====================
+function toggleFullscreen() {
+    var isFs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (isFs) {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } else {
+        var el = document.documentElement;
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    }
+}
 </script>
 </body>
 </html>
