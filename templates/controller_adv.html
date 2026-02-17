@@ -12,10 +12,10 @@
         .header { background: rgba(28, 28, 30, 0.8); backdrop-filter: blur(15px); padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; border-bottom: 0.5px solid #333; }
         .scroll-area { padding: 8px; overflow-y: auto; flex-grow: 1; gap: 8px; display: grid; padding-bottom: 10px; grid-template-columns: 1fr; }
         .card { min-height: 0; }
-        @media (min-width: 600px) { 
+        @media (min-width: 768px) { 
             .scroll-area { grid-template-columns: repeat(2, 1fr); } 
             .card.full-width { grid-column: 1 / -1; } 
-        }
+}
         @media (min-width: 900px) { 
             .scroll-area { grid-template-columns: repeat(3, 1fr); } 
         }
@@ -24,9 +24,9 @@
         }
         /* Fill vertical space and let last-row cards stretch */
         .scroll-area { align-content: start; }
-        @media (min-height: 600px) {
+        @media (min-height: 600px) and (min-width: 768px) {
             .scroll-area { overflow-y: hidden; align-content: stretch; }
-        }
+}
         .card { background: var(--card); border-radius: 12px; padding: 12px; border: 0.5px solid #333; display: flex; flex-direction: column; }
         .val-display { font-size: 2rem; font-weight: 800; line-height: 1; cursor: pointer; }
         .val-display:active { opacity: 0.5; }
@@ -724,7 +724,19 @@ function setAllNormal() {
     // Cancel all trends
     ['hr', 'spo2', 'resp', 'temp', 'etco2'].forEach(function(v) { cancelTrend(v); });
     cancelTrend('nibp');
+    // Force all sliders to fire their input events so display labels update
+    ['hr_s','spo2_s','resp_s','etco2_s','sys_s','dia_s','temp_s'].forEach(function(id) {
+        document.getElementById(id).dispatchEvent(new Event('input'));
+    });
     updateDisplayValues();
+    // Turn ON all connection toggles
+    document.getElementById('hr_on').checked = true;
+    document.getElementById('spo2_on').checked = true;
+    document.getElementById('resp_on').checked = true;
+    document.getElementById('nibp_on').checked = true;
+    document.getElementById('temp_on').checked = true;
+    document.getElementById('abp_on').checked = false;
+    document.getElementById('etco2_on').checked = false;
     if (liveSync) sendVitals();
     ectopicEnabled = false;
         ectopicFrequency = 'medium';
