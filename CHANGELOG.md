@@ -1,5 +1,68 @@
 # Changelog
 
+## Phase 1 — Waveform engine
+
+### New: a physiology engine shared by the monitor and controller
+- **New file `static/js/sim-engine.js`.** It models the heart in three layers:
+  - atrial activity (P waves, flutter, fibrillation),
+  - ventricular complexes,
+  - the mechanical beat each complex produces.
+  
+  Breathing drives the respiration and CO₂ waves. All signals are generated on the clock at 250 Hz, never per screen frame.
+- **New file `static/js/wave-renderer.js`.** It draws each wave at true speed: 25 mm/s for ECG, pleth and ABP, and 6.25 mm/s for respiration and CO₂. Speed is the same on 60 Hz and 120 Hz screens, and traces are sharp on high-resolution phones and tablets.
+- **New test file `tests/engine.test.js`** with 46 physiology checks. Run it with `node tests/engine.test.js`; it needs nothing installed.
+
+### Rhythms
+- **All 15 rhythms rebuilt** with lead II shapes: P waves, QRS width per rhythm, and T waves whose QT interval shortens as the rate rises.
+- **AF:** truly irregular, no P waves, fibrillatory baseline.
+- **Flutter:** saw-tooth waves near 300/min, conducted 2:1 at 150 and 4:1 at 75.
+- **2nd-degree blocks:** Wenckebach lengthens the PR then drops a beat; Mobitz II keeps a constant PR with a sudden dropped beat.
+- **Complete heart block:** P waves at about 75/min run independently of a wide escape rhythm.
+- **PVCs:** premature and wide, with a compensatory pause and a weak pulse.
+
+### What each rhythm does to the other channels
+- **Pulse beat by beat:** each ventricular beat produces a pulse sized by its filling time, so in AF the pulse size varies and weak beats can be missed (a pulse deficit).
+- **Pulseless rhythms (VF, asystole, PEA, pulseless VT, agonal):**
+  - The pleth goes flat.
+  - SpO₂ shows `-?-` with **NO PULSE**.
+  - The arterial line falls to a flat ~15 mmHg.
+  - NIBP measurements fail with **NBP FAILED**.
+- **HR is counted from the QRS complexes.** Dropped beats lower it, VF shows `-?-` (it can't be counted), and asystole shows 0. The SpO₂ block now also shows the **pulse rate (PR)** from the pleth, so PEA and pulse deficits are visible.
+- **Arterial line (ABP):**
+  - Fast upstroke, sharp peak, dicrotic notch, then diastolic run-off.
+  - The numbers settle on the set systolic and diastolic, including in AF and 2nd-degree block.
+  - MAP is measured from the trace (about 40% of the way from diastolic to systolic, as in a real radial line).
+  - Pressure falls during long pauses.
+- **Capnogram:** box shape with steep sides. EtCO₂ is measured breath by breath, and reads 0 after 20 s of apnoea.
+  - New **Obstructive** shape (shark-fin) for bronchospasm, asthma and anaphylaxis scenarios.
+  - When pulseless without CPR, EtCO₂ falls toward zero over about a minute, because no blood is reaching the lungs. With CPR it shows the value you set, which lets you represent CPR quality. ROSC brings it back.
+- **CPR:** compressions at ~110/min show on the ECG, pleth, arterial line (~75/15), respiration and capnogram. Compressions are not counted as a pulse.
+- **Shock:** the ECG saturates and recovers, with a brief disturbance on the pleth and ABP.
+
+### Controller
+- **Choosing a rhythm sets typical defaults:** HR snaps to the rhythm's usual rate (VT 180, complete heart block 35, VF `---`) and the new **Pulse** switch to its default. Both can be changed before pressing UPDATE.
+- **Pulse switch**, for example VT with or without a pulse, or a PEA scenario.
+- **Capnogram shape buttons** (Normal / Obstructive) on the EtCO₂ card.
+- **One message builder** now produces every vitals message, so trend steps and normal updates always send the same fields.
+
+### Spot Check
+- **No pulse:** a pulse of 0 shows **NO PULSE**, SpO₂ shows `---`, and a high-priority alarm sounds.
+- **BP without a pulse** gives **NO READING**.
+
+### Colours
+- EtCO₂ is now yellow, and respiration and NIBP are white-grey (the agreed Philips/GE-style palette). Per-waveform colour choice comes in Phase 3.
+
+### How to test on devices
+1. Start an Advanced session. Turn on HR, SpO₂, RR, NIBP and temperature, then add ABP and EtCO₂ from the dock.
+2. Step through each rhythm. When you select one, HR and Pulse should jump to its defaults on the controller; then press UPDATE.
+3. **PEA:** the ECG keeps counting, SpO₂ shows `-?-` NO PULSE, and the arterial line goes flat. Press NIBP: it should fail.
+4. **VF with CPR on:** compression waves should appear. Set EtCO₂ to about 15 to represent good CPR.
+5. **ROSC:** choose NSR with Pulse on. Within a few seconds the pulse, SpO₂ and arterial pressure should return.
+6. **AF:** the pulse should vary beat to beat, and PR may read slightly below HR.
+7. **NSR with frequent ectopics:** wide PVCs should appear with a pause after each and a small pleth pulse.
+8. **EtCO₂ Obstructive:** the capnogram should become shark-fin shaped.
+9. **Spot Check ARREST preset:** NO PULSE and `---` with an alarm. Start BP: it should give NO READING.
+
 ## Phase 0 — Safety net and bug fixes
 
 ### Deployment
