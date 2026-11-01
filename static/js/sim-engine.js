@@ -20,7 +20,7 @@
 
     var STEP = 4;          // ms per sample (250 Hz)
     var BUF = 4096;        // ring buffer length in samples (~16 s)
-    var LOOKAHEAD = 2000;  // schedule cardiac/breath events this far ahead (ms)
+    var LOOKAHEAD = 1000;  // schedule cardiac/breath events this far ahead (ms) — enough for P waves before each QRS
     var EJECT_DELAY = 180; // R peak -> arterial upstroke at the radial artery (ms)
     var PLETH_DELAY = 250; // R peak -> start of finger pleth pulse (ms)
     var PV = 15;           // arterial pressure with no circulation (mmHg)
@@ -571,14 +571,14 @@
         // Heart rate from counted QRS complexes. VF cannot be counted.
         if (R.mode === 'vf') out.hr = null;
         else {
-            var hr = rateFrom(this.rTimes, t, 8, 6000);
+            var hr = rateFrom(this.rTimes, t, 6, 6000);  // average of the last 6 beats
             var lastR = this.rTimes.length ? this.rTimes[this.rTimes.length - 1] : Math.max(-1e9, this.rhythmChangeT || -1e9);
             out.hr = hr == null ? (t - lastR > 6000 ? 0 : null) : hr;
         }
         // Pulse rate from the pleth; needs a few detected pulses
         var recent = this.prTimes.filter(function (x) { return x > t - 8000; });
         out.plethValid = recent.length >= 3 && (t - recent[recent.length - 1] < 4000);
-        out.pr = out.plethValid ? rateFrom(this.prTimes, t, 8, 4000) : null;
+        out.pr = out.plethValid ? rateFrom(this.prTimes, t, 6, 4000) : null;
         out.perfusing = t - this.lastPerfusing < 4000;
         // Arterial pressure: averaged beat values, or the raw window when there are no beats (arrest, CPR)
         if (this.abpDisp && t - this.lastEjection < 3000) {

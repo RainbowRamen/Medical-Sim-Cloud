@@ -7,6 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="{{ url_for('static', filename='js/sim-engine.js') }}"></script>
     <script src="{{ url_for('static', filename='js/wave-renderer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sim-audio.js') }}"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root { --bg-color: #000; --ecg-color: #30d158; --spo2-color: #64d2ff; --spo2-color-alt: #ffd60a; --resp-color: #d1d1d6; --abp-color: #ff453a; --etco2-color: #ffd60a; --temp-color: #bf5af2; --header-bg: #1a1a1a; --header-h: 40px; --footer-h: 70px; --btn-bg: linear-gradient(180deg, #333 0%, #1a1a1a 100%); --alarm-red: #ff3b30; --alarm-yellow: #ffd60a; --grey: #8e8e93; --m-green: rgba(48, 209, 88, 0.2); }
@@ -17,6 +18,10 @@
         .alarm-paused-indicator.active { display: flex; }
         .alarm-indicator.active-alarm { background: var(--alarm-red); color: white; animation: alarm-flash 0.5s infinite; border-color: var(--alarm-red); }
         @keyframes alarm-flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .alarm-indicator.medium-alarm { background: var(--alarm-yellow); color: black; animation: alarm-flash 1.67s infinite; border-color: var(--alarm-yellow); }
+        .sound-blocked { display: none; background: #ff9500; color: black; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 800; cursor: pointer; animation: alarm-flash 1.67s infinite; }
+        .sound-blocked.active { display: flex; align-items: center; }
+        .vol-btn.disabled { opacity: 0.25; pointer-events: none; }
         .monitor-grid { display: flex; height: calc(100vh - var(--header-h) - var(--footer-h)); width: 100vw; overflow: hidden; }
         .wave-container { flex: 0 0 78%; display: flex; flex-direction: column; height: 100%; border-right: 1px solid #222; }
         .wave-row { flex: 1 1 0; position: relative; border-bottom: 1px solid #1a1a1a; min-height: 0; background: #000; cursor: pointer; }
@@ -27,9 +32,9 @@
         canvas { width: 100%; height: 100%; display: block; }
         .vitals-container { flex: 1; display: flex; flex-direction: column; height: 100%; padding: 2px; background: #0a0a0a; }
         .vital-block { flex: 1 1 0; margin: 2px; background: linear-gradient(180deg, #111 0%, #050505 100%); border-radius: 4px; padding: 4px 8px; display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #222; min-height: 0; overflow: hidden; transition: all 0.3s; }
-        .vital-block.alarm-state { background: linear-gradient(180deg, #4a0000 0%, #050505 100%); animation: vital-alarm 1s infinite; }
+        .vital-block.alarm-state { background: linear-gradient(180deg, #4a0000 0%, #050505 100%); animation: vital-alarm 0.5s infinite; } /* 2 Hz */
         @keyframes vital-alarm { 0%, 100% { border-left-color: var(--alarm-red); } 50% { border-left-color: #222; } }
-        .vital-block.alarm-medium { background: linear-gradient(180deg, #3a3000 0%, #050505 100%); animation: vital-alarm-amber 1.5s infinite; }
+        .vital-block.alarm-medium { background: linear-gradient(180deg, #3a3000 0%, #050505 100%); animation: vital-alarm-amber 1.67s infinite; } /* 0.6 Hz */
         @keyframes vital-alarm-amber { 0%, 100% { border-left-color: var(--alarm-yellow); } 50% { border-left-color: #222; } }
         .v-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; }
         .v-limits { font-size: 10px; opacity: 0.4; line-height: 1; font-weight: 400; text-align: right; }
@@ -178,6 +183,7 @@
 <div class="monitor-header">
     <div class="patient-btn" id="patient_display" onclick="openPatientOverlay()">PATIENT: ADULT ▼</div>
     <div class="alarm-indicator" id="alarm_status">NO ALARMS</div>
+    <div class="sound-blocked" id="sound_blocked" onclick="SimAudio.unlock()">🔇 TAP FOR SOUND</div>
     <div class="alarm-paused-indicator" id="alarm_paused_indicator">⏸ PAUSED <span id="alarm_pause_countdown">2:00</span></div>
     <div id="connection-status" style="color: var(--alarm-red);">● DISCONNECTED</div>
     <div style="display: flex; align-items: center; gap: 10px;">
@@ -321,7 +327,6 @@ var spo2OnSince = 0;              // when the SpO2 probe was connected (ms, perf
 // ==================== MASTER CONTROL STATE ====================
 var isPaused = false;
 var isCPRActive = false;
-var masterVolume = 0.5;
 
 // ==================== SMOOTH TRANSITIONS ====================
 // Values move toward what the instructor set at a physiological pace (units per second)
@@ -520,25 +525,25 @@ function setNibpCycle(seconds, btnEl) {
     if (btnEl) btnEl.classList.add('active');
 }
 // ==================== AUDIO ====================
-var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+// Sound is handled by static/js/sim-audio.js (shared with Spot Check): it unlocks on taps,
+// recovers when the phone suspends audio, and plays IEC 60601-1-8 alarm patterns.
+SimAudio.init();
 var qrsVolume = 0.5;
 var alarmVolume = 0.5;
 var activeVolumeBar = null;
+SimAudio.setQrsVolume(qrsVolume);
+SimAudio.setAlarmVolume(alarmVolume);
+SimAudio.onBlockedChange(updateSoundHint);
 
 function playHeartbeatBeep() {
-    if (!isPoweredOn || qrsVolume === 0 || isPaused) return;
-    var osc = audioCtx.createOscillator();
-    var gain = audioCtx.createGain();
+    if (!isPoweredOn || isPaused) return;
     // pitch follows SpO2 only while there is a valid saturation reading
-    var clampedSpo2 = (states.spo2_on && meas.plethValid) ? Math.max(40, Math.min(100, current.spo2)) : 100;
-    var freq = 200 + ((clampedSpo2 - 40) / 60) * 680;
-    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    var vol = qrsVolume * masterVolume * 0.15;
-    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-    gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+    SimAudio.beep(states.spo2_on && meas.plethValid ? current.spo2 : null);
+}
+
+// Show "tap for sound" while the monitor is on but the browser is blocking audio
+function updateSoundHint() {
+    document.getElementById('sound_blocked').classList.toggle('active', isPoweredOn && SimAudio.isBlocked());
 }
 
 // ==================== IEC 60601-1-8 ALARM SYSTEM ====================
@@ -553,76 +558,6 @@ function getAlarmPriority() {
     for (var k in alarmState) { if (alarmState[k]) return 'medium'; }
 
     return 'none';
-}
-
-function playAlarmPulse(freq, duration, volume, delay) {
-    // IEC compliant pulse: fundamental + harmonics, 10ms rise/fall
-    setTimeout(function() {
-        var fundamental = audioCtx.createOscillator();
-        var h2 = audioCtx.createOscillator();
-        var h3 = audioCtx.createOscillator();
-        var h4 = audioCtx.createOscillator();
-        var gain = audioCtx.createGain();
-
-        fundamental.frequency.value = freq;
-        h2.frequency.value = freq * 2;
-        h3.frequency.value = freq * 3;
-        h4.frequency.value = freq * 4;
-
-        // Mix harmonics slightly quieter than fundamental
-        var mix = audioCtx.createGain();
-        mix.gain.value = 0.6;
-
-        fundamental.connect(gain);
-        h2.connect(mix); h3.connect(mix); h4.connect(mix);
-        mix.connect(gain);
-        gain.connect(audioCtx.destination);
-
-        var t = audioCtx.currentTime;
-        var vol = volume * alarmVolume * masterVolume;
-        // 10ms rise, sustain, 10ms fall (IEC: rise ≥ 10ms)
-        gain.gain.setValueAtTime(0.0001, t);
-        gain.gain.linearRampToValueAtTime(vol, t + 0.01);
-        gain.gain.setValueAtTime(vol, t + duration - 0.01);
-        gain.gain.linearRampToValueAtTime(0.0001, t + duration);
-
-        [fundamental, h2, h3, h4].forEach(function(o) { o.start(t); o.stop(t + duration); });
-    }, delay);
-}
-
-function playAlarmTone() {
-    var priority = getAlarmPriority();
-    if (priority === 'none') return;
-
-    if (priority === 'high') {
-        // HIGH: 10 pulses grouped 5+5, short pulses (50ms), fast spacing
-        // Group 1: 5 pulses
-        for (var i = 0; i < 5; i++) {
-            playAlarmPulse(480, 0.05, 0.25, i * 100);
-        }
-        // Brief gap (150ms) then Group 2: 5 pulses
-        for (var j = 0; j < 5; j++) {
-            playAlarmPulse(480, 0.05, 0.25, 650 + j * 100);
-        }
-    } else if (priority === 'medium') {
-        // MEDIUM: 3 pulses, moderate duration (150ms), moderate spacing
-        for (var k = 0; k < 3; k++) {
-            playAlarmPulse(440, 0.15, 0.18, k * 300);
-        }
-    }
-}
-
-function playShockSound() {
-    var osc = audioCtx.createOscillator();
-    var gain = audioCtx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3);
-    var vol = masterVolume * 0.4;
-    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.start(); osc.stop(audioCtx.currentTime + 0.5);
 }
 
 // ==================== WAVEFORM STATE ====================
@@ -707,7 +642,7 @@ socket.on('update_monitor', function(data) {
     } else if (data.type === 'shock') {
         triggerShock();
     } else if (data.type === 'master_volume') {
-        masterVolume = data.volume / 100;
+        SimAudio.setMasterVolume(data.volume / 100);
     } else if (data.type === 'system_reset') {
         location.reload();
     } else if (data.type === 'force_reload') {
@@ -721,7 +656,7 @@ socket.on('system_shutdown_trigger', function() { showPowerScreen(); });
 
 function triggerShock() {
     engine.shock();
-    if (isPoweredOn) playShockSound();
+    if (isPoweredOn) SimAudio.shock();
 }
 
 function resetMonitor() {
@@ -762,6 +697,8 @@ function showPowerScreen() {
     document.getElementById('startup_bar').style.width = '0%';
     document.getElementById('power_overlay').classList.remove('hidden');
     releaseWakeLock();
+    SimAudio.setAlarm('none');
+    updateSoundHint();
 }
 
 var noiseTarget = { hr: 0, spo2: 0, resp: 0, etco2: 0, temp: 0, abp_sys: 0, abp_dia: 0 };
@@ -891,9 +828,10 @@ function checkAlarms() {
         indicator.style.display = 'flex';
         if (anyAlarm) {
             var isHigh = (getAlarmPriority() === 'high');
-            indicator.classList.add('active-alarm'); indicator.innerText = isHigh ? '⚠ CRITICAL' : 'ALARM ACTIVE';
+            indicator.classList.toggle('active-alarm', isHigh); indicator.classList.toggle('medium-alarm', !isHigh);
+            indicator.innerText = isHigh ? '⚠ CRITICAL' : 'ALARM ACTIVE';
         } else {
-            indicator.classList.remove('active-alarm'); indicator.innerText = 'NO ALARMS'; indicator.style.color = '#ccc';
+            indicator.classList.remove('active-alarm', 'medium-alarm'); indicator.innerText = 'NO ALARMS'; indicator.style.color = '#ccc';
         }
     }
 }
@@ -942,7 +880,7 @@ function resizeChannels() { Object.keys(channels).forEach(function(k) { channels
 window.addEventListener('resize', function() { requestAnimationFrame(resizeChannels); });
 
 // ==================== ANIMATION LOOP ====================
-var lastFrame = null, lastAlarmTime = 0, lastNumbers = 0;
+var lastFrame = null, lastNumbers = 0;
 
 function animate(ts) {
     ts = ts || 0;
@@ -970,16 +908,13 @@ function animate(ts) {
         lastNumbers = ts;
         meas = engine.measured();
         updateDisplayedValues();
+        updateSoundHint();
     }
 
+    // Alarm sound: the audio module repeats the IEC burst for the current priority until it changes
     var anyAlarm = false;
     for (var k in alarmState) { if (alarmState[k]) anyAlarm = true; }
-    var priority = getAlarmPriority();
-    var repeatInterval = (priority === 'high') ? 3000 : 5000;
-    if (isPoweredOn && !isPaused && anyAlarm && !alarmsSilenced && alarmVolume > 0 && ts - lastAlarmTime > repeatInterval) {
-        playAlarmTone();
-        lastAlarmTime = ts;
-    }
+    SimAudio.setAlarm(isPoweredOn && !isPaused && anyAlarm && !alarmsSilenced ? getAlarmPriority() : 'none');
 
     document.getElementById('block_spo2').style.borderLeftWidth = (states.spo2_on && meas.plethValid && current.spo2 < 90) ? '6px' : '4px';
 
@@ -1093,12 +1028,14 @@ function toggleVolumeBar(type) {
 }
 
 function setVolume(level) {
-    var volume = level / 10;
     if (activeVolumeBar === 'qrs') {
-        qrsVolume = volume;
+        qrsVolume = level / 10;
+        SimAudio.setQrsVolume(qrsVolume);
         updateVolumeButtons(level, false);
     } else if (activeVolumeBar === 'alarm') {
-        alarmVolume = volume;
+        level = Math.max(1, level);   // alarms can be quiet but never silent by volume alone
+        alarmVolume = level / 10;
+        SimAudio.setAlarmVolume(alarmVolume);
         updateVolumeButtons(level, true);
     }
 }
@@ -1106,7 +1043,8 @@ function setVolume(level) {
 function updateVolumeButtons(selectedLevel, isAlarm) {
     var buttons = document.querySelectorAll('.vol-btn');
     buttons.forEach(function(btn, index) {
-        btn.classList.remove('selected', 'alarm-vol');
+        btn.classList.remove('selected', 'alarm-vol', 'disabled');
+        if (isAlarm && index === 0) btn.classList.add('disabled');
         if (index === selectedLevel) {
             btn.classList.add('selected');
             if (isAlarm) btn.classList.add('alarm-vol');
@@ -1145,6 +1083,7 @@ function showMenu() { alert('Menu:\n\n• Alarm Settings\n• Display Setup\n•
 var isPoweredOn = false;
 function startPowerOn() {
     if (isPoweredOn) return;
+    SimAudio.unlock();   // must happen inside the tap, not after the boot animation
     var btn = document.getElementById('power_btn');
     var label = document.getElementById('power_label');
     var text = document.getElementById('startup_text');
@@ -1171,8 +1110,8 @@ function startPowerOn() {
                 setTimeout(function() {
                     document.getElementById('power_overlay').classList.add('hidden');
                     isPoweredOn = true;
-                    if (audioCtx.state === 'suspended') audioCtx.resume();
                     requestWakeLock();
+                    updateSoundHint();
                 }, 500);
             }
         }, 50);

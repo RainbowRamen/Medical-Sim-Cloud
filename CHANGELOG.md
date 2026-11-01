@@ -1,5 +1,54 @@
 # Changelog
 
+## Phase 2 — Sound
+
+### Why sound sometimes didn't play on phones
+- **Cause:** iOS and Android only allow sound that starts from a tap. The Advanced monitor started its sound about 3 seconds after the power-on tap, from a timer, which iOS refuses. Sound then stayed off until something else woke the phone's audio, such as the volume buttons. The audio was also created when the page loaded, before any tap.
+- **Fix:** sound now starts inside the power-on tap, and every later touch, click or key re-wakes it. So if the phone suspends audio (screen lock, a call, switching apps), the next touch brings it back. When the page comes back into view it tries to resume on its own.
+- **"TAP FOR SOUND" badge:** if the browser still blocks sound, a flashing badge appears in the header. Tapping anywhere fixes it.
+- **Silent switch:** on iOS the audio session is set to "playback", so alarms are heard even with the ringer switch on silent. Older iOS versions use a fallback that does the same.
+
+### One shared sound module: `static/js/sim-audio.js`
+- **Used by both monitors**, so sounds behave identically in each.
+- **Scheduled on the audio clock**, not with timers, so pulses keep exact timing even when the page is busy.
+- **A limiter on the output** stops alarms and beeps clipping when they overlap.
+
+### Alarms follow IEC 60601-1-8
+| Priority | Burst | Pulse | Repeats |
+|---|---|---|---|
+| High | 10 pulses: x-x-x--x-x, pause 0.4 s, x-x-x--x-x | 100 ms | every 5.0 s (2.6 s gap) |
+| Medium | 3 pulses: x-x-x | 180 ms | every 4.8 s (4.0 s gap) |
+| Low (available) | 2 pulses | 180 ms | every 16 s |
+
+- **Tone:** 523 Hz fundamental with four harmonics, all within the required ±15 dB.
+- **Loudness:** high is about 4 dB louder than medium.
+- **Escalation:** when an alarm escalates (e.g. HR high, then VF) the high pattern starts immediately.
+- **Pausing:** paused alarms stop at once. The Spot Check monitor gives a quiet reminder pulse every 30 s while paused.
+- **Volume floor:** alarm volume can't be turned down to 0 (minimum level 1). QRS volume can.
+- **Visual signals:**
+  - High priority flashes red at 2 Hz.
+  - Medium flashes yellow at 0.6 Hz.
+  - The header badge turns yellow for medium alarms on both monitors.
+
+### QRS / pulse tone
+- **One short tone per beat**, in time with the R wave. On Spot Check it follows the pulse.
+- **Pitch follows SpO₂:** one semitone lower for each 1% drop (880 Hz at 100%, about 494 Hz at 90%). A harmonic keeps low pitches audible on phone speakers. With no valid SpO₂ reading the pitch stays fixed.
+- **Defibrillator shock:** now a short broadband thump that's audible on small speakers.
+
+### Other
+- The displayed HR now follows rate changes faster: it averages the last 6 beats, and the engine plans 1 s ahead instead of 2 s.
+- New test file: `node tests/audio.test.js` checks the alarm patterns against the standard's limits.
+
+### How to test on devices (iPhone/iPad especially)
+1. Open a monitor and tap power. You should hear QRS beeps straight away, including with the ringer switch on silent.
+2. Lock the phone for 30 s, unlock it, and return to the browser. Sound should continue. If "TAP FOR SOUND" appears, one tap should fix it.
+3. Switch to another app and back: same result.
+4. Set HR to 140. You should hear 3-pulse medium bursts, and the HR block flashes yellow slowly.
+5. Choose VF. The 10-pulse high alarm should start immediately, with a fast red flash.
+6. Press Pause Alarms. Sound stops at once and returns after 2 minutes or when pressed again.
+7. Drop SpO₂ from 98 toward 85. The beep pitch should fall clearly.
+8. Change the master volume from the controller. The monitor volume should follow.
+
 ## Phase 1 — Waveform engine
 
 ### New: a physiology engine shared by the monitor and controller
