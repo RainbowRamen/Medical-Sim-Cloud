@@ -3,29 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SimControl - Pro (Basic)</title>
+    <title>Spot check controller</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #f2f2f7;
+            --bg: #e9edf1;
             --surface: #ffffff;
             --surface-raised: #f9f9fb;
             --border: #d1d1d6;
             --border-subtle: #e5e5ea;
-            --text-primary: #1c1c1e;
-            --text-secondary: #8e8e93;
+            --text-primary: #13202d;
+            --text-secondary: #5b6876;
             --text-dim: #c7c7cc;
-            --accent: #007aff;
-            --green: #34c759;
-            --cyan: #32ade6;
+            --accent: #0068b0;
+            --green: #087a3e;
+            --cyan: #0068b0;
             --red: #ff3b30;
-            --purple: #af52de;
-            --bp-color: #636366;
+            --purple: #6a3fb5;
+            --bp-color: #13202d;
         }
-        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: var(--text-primary); }
+        body { font-family: 'Barlow', -apple-system, 'Segoe UI', Roboto, sans-serif; background: var(--bg); margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: var(--text-primary); }
 
         /* ===== UTILITY BAR ===== */
         .utility-bar { background: var(--surface); padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); box-shadow: 0 1px 0 rgba(0,0,0,0.04); }
@@ -34,7 +34,7 @@
         .dot.online { background: var(--green); box-shadow: 0 0 6px rgba(52, 199, 89, 0.35); }
 
         .util-btn-group { display: flex; gap: 6px; }
-        .util-btn { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 6px 12px; font-size: 0.65rem; font-weight: 700; cursor: pointer; background: var(--surface-raised); color: var(--text-secondary); transition: all 0.1s; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; }
+        .util-btn { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 6px 12px; font-size: 0.65rem; font-weight: 700; cursor: pointer; background: var(--surface-raised); color: var(--text-secondary); transition: all 0.1s; font-family: 'Barlow', -apple-system, 'Segoe UI', Roboto, sans-serif; letter-spacing: 0.5px; }
         .util-btn:active { transform: scale(0.94); background: var(--border-subtle); }
 
         /* ===== SCROLL AREA ===== */
@@ -44,7 +44,7 @@
         .card { background: var(--surface); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--border-subtle); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
 
         .room-card { text-align: center; border-left: 4px solid var(--accent); padding: 12px; }
-        .room-id { font-size: 1.8rem; font-weight: 900; letter-spacing: 4px; color: var(--accent); margin: 5px 0; }
+        .room-id { font-family: 'Barlow Condensed', sans-serif; font-size: 2.2rem; font-weight: 600; letter-spacing: 4px; color: var(--accent); margin: 5px 0; }
 
         #qr_img { width: 110px; height: 110px; margin-top: 5px; border-radius: 10px; border: 1px solid var(--border-subtle); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
         #qr_img:active { transform: scale(1.05); box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2); }
@@ -54,13 +54,13 @@
         #qr_fullscreen_img { width: 80vmin; height: 80vmin; display: flex; align-items: center; justify-content: center; }
         #qr_fullscreen p { color: white; margin-top: 20px; font-weight: 700; letter-spacing: 2px; font-size: 0.75rem; }
 
-        .copy-link-btn { margin-top: 10px; width: 100%; padding: 10px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-raised); font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); cursor: pointer; transition: all 0.1s; font-family: 'JetBrains Mono', monospace; }
+        .copy-link-btn { margin-top: 10px; width: 100%; padding: 10px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-raised); font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); cursor: pointer; transition: all 0.1s; font-family: 'Barlow', -apple-system, 'Segoe UI', Roboto, sans-serif; }
         .copy-link-btn:active { transform: scale(0.97); background: var(--border-subtle); }
 
         /* ===== CARD SECTIONS ===== */
         .card-top { display: flex; justify-content: flex-start; align-items: center; gap: 12px; margin-bottom: 12px; }
         .label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 1px; }
-        .display-val { font-size: 2.2rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
+        .display-val { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-size: 2.6rem; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
         .sync-row { display: flex; justify-content: flex-start; align-items: center; gap: 12px; background: var(--surface-raised); padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; border: 2px solid transparent; transition: all 0.3s; }
         .sync-row.active { border-color: var(--accent); background: rgba(0, 122, 255, 0.05); }
@@ -78,7 +78,7 @@
         #sys_s, #dia_s { background: linear-gradient(90deg, #e5e5ea, #d1d1d6); } #sys_s:active, #dia_s:active { background: var(--bp-color); }
         #temp_s { background: linear-gradient(90deg, #ead6f5, #dcc4ef); } #temp_s:active { background: var(--purple); }
 
-        .step-btn { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border-subtle); background: var(--surface); font-size: 1.4rem; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.1s; font-family: 'JetBrains Mono', monospace; }
+        .step-btn { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border-subtle); background: var(--surface); font-size: 1.4rem; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.1s; font-family: 'Barlow', -apple-system, 'Segoe UI', Roboto, sans-serif; }
         .step-btn:active { transform: scale(0.9); background: var(--border-subtle); }
 
         /* ===== TOGGLE SWITCH ===== */
@@ -92,11 +92,11 @@
 
         /* ===== QUALITY BUTTONS ===== */
         .quality-group { display: flex; gap: 5px; margin-top: 10px; }
-        .q-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--surface-raised); font-size: 0.65rem; font-weight: 700; cursor: pointer; transition: all 0.1s; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; }
+        .q-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--surface-raised); font-size: 0.65rem; font-weight: 700; cursor: pointer; transition: all 0.1s; color: var(--text-secondary); font-family: 'Barlow', -apple-system, 'Segoe UI', Roboto, sans-serif; letter-spacing: 0.5px; }
         .q-btn.active { background: var(--cyan); color: white; border-color: var(--cyan); box-shadow: 0 2px 6px rgba(50, 173, 230, 0.3); }
 
         /* ===== ACTION BUTTONS ===== */
-        .btn-action { width: 100%; border: none; padding: 14px; border-radius: 12px; font-weight: 700; margin-top: 12px; font-size: 0.85rem; cursor: pointer; color: white; transition: all 0.2s; opacity: 1; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; }
+        .btn-action { width: 100%; border: none; padding: 14px; border-radius: 12px; font-weight: 700; margin-top: 12px; font-size: 0.85rem; cursor: pointer; color: white; transition: all 0.2s; opacity: 1; font-family: 'Barlow', -apple-system, 'Segoe UI', Roboto, sans-serif; letter-spacing: 0.5px; }
         .btn-action:active { transform: scale(0.97); filter: brightness(0.9); }
         .btn-action:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
         .btn-success { background: var(--green) !important; }
@@ -105,7 +105,7 @@
 
         /* ===== PRESETS ===== */
         .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .btn-preset { padding: 14px; border: 2px solid var(--border); border-radius: 12px; font-weight: 700; background: var(--surface); cursor: pointer; font-size: 0.95rem; transition: all 0.1s; font-family: 'JetBrains Mono', monospace; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+        .btn-preset { padding: 14px; border: 2px solid var(--border); border-radius: 12px; font-weight: 700; background: var(--surface); cursor: pointer; font-size: 0.95rem; transition: all 0.1s; font-family: 'Barlow', -apple-system, 'Segoe UI', Roboto, sans-serif; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
         .btn-preset:active { transform: scale(0.95); }
         .p-normal { border-color: var(--green); color: var(--green); }
         .p-arrest { border-color: var(--red); color: var(--red); }

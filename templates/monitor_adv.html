@@ -3,222 +3,384 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Clinical Monitor - Advanced Mode</title>
+    <title>Patient monitor</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="{{ url_for('static', filename='js/sim-engine.js') }}"></script>
     <script src="{{ url_for('static', filename='js/wave-renderer.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sim-audio.js') }}"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet">
     <style>
+        /* ================= TOKENS =================
+           Monitor black, parameter colours (user-changeable from Menu), IEC alarm colours. */
+        :root {
+            --bg: #000;
+            --line: #23272d;          /* hairlines between waves and tiles */
+            --chrome: #15181c;        /* header / soft keys */
+            --chrome-2: #22262c;
+            --text: #e9ecef;
+            --text-dim: #8a929b;
+
+            --c-ecg: #00e676;  --c-spo2: #29d3ff;  --c-abp: #ff3b3b;  --c-nibp: #f2f2f2;
+            --c-co2: #ffe03a;  --c-resp: #f2f2f2;  --c-temp: #c3a6ff;
+
+            --alarm-high: #e8141c;    /* red, flashing 1.4–2.8 Hz */
+            --alarm-med: #ffd400;     /* yellow, flashing 0.4–0.8 Hz */
+            --alarm-tech: #00b8f0;    /* technical (INOP) messages */
+
+            --num: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
+            --ui: 'Barlow', -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+            --header-h: 40px;
+            --footer-h: 58px;
+            /* legacy names still used by the settings dialogs */
+            --ecg-color: var(--c-ecg); --spo2-color: var(--c-spo2); --abp-color: var(--c-abp);
+            --resp-color: var(--c-resp); --etco2-color: var(--c-co2); --temp-color: var(--c-temp);
+            --alarm-red: var(--alarm-high); --alarm-yellow: var(--alarm-med); --grey: var(--text-dim);
+            --m-green: rgba(0, 230, 118, 0.18);
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        :root { --bg-color: #000; --ecg-color: #30d158; --spo2-color: #64d2ff; --spo2-color-alt: #ffd60a; --resp-color: #d1d1d6; --abp-color: #ff453a; --etco2-color: #ffd60a; --temp-color: #bf5af2; --header-bg: #1a1a1a; --header-h: 40px; --footer-h: 70px; --btn-bg: linear-gradient(180deg, #333 0%, #1a1a1a 100%); --alarm-red: #ff3b30; --alarm-yellow: #ffd60a; --grey: #8e8e93; --m-green: rgba(48, 209, 88, 0.2); }
-        body, html { background: var(--bg-color); color: white; font-family: 'Segoe UI', 'Roboto', sans-serif; height: 100vh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; user-select: none; }
-        .monitor-header { height: var(--header-h); background: var(--header-bg); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; font-size: 14px; font-weight: 700; border-bottom: 1px solid #333; flex-shrink: 0; }
-        .alarm-indicator { width: 100px; height: 30px; border-radius: 4px; background: #1a1a1a; border: 2px solid #333; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; transition: all 0.3s; }
-        .alarm-paused-indicator { display: none; background: var(--alarm-yellow); color: black; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 800; align-items: center; gap: 6px; }
-        .alarm-paused-indicator.active { display: flex; }
-        .alarm-indicator.active-alarm { background: var(--alarm-red); color: white; animation: alarm-flash 0.5s infinite; border-color: var(--alarm-red); }
-        @keyframes alarm-flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .alarm-indicator.medium-alarm { background: var(--alarm-yellow); color: black; animation: alarm-flash 1.67s infinite; border-color: var(--alarm-yellow); }
-        .sound-blocked { display: none; background: #ff9500; color: black; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 800; cursor: pointer; animation: alarm-flash 1.67s infinite; }
-        .sound-blocked.active { display: flex; align-items: center; }
-        .vol-btn.disabled { opacity: 0.25; pointer-events: none; }
-        .monitor-grid { display: flex; height: calc(100vh - var(--header-h) - var(--footer-h)); width: 100vw; overflow: hidden; }
-        .wave-container { flex: 0 0 78%; display: flex; flex-direction: column; height: 100%; border-right: 1px solid #222; }
-        .wave-row { flex: 1 1 0; position: relative; border-bottom: 1px solid #1a1a1a; min-height: 0; background: #000; cursor: pointer; }
-        .wave-label { position: absolute; top: 4px; left: 8px; font-size: 14px; font-weight: 800; z-index: 10; }
-        .sweep-speed { position: absolute; top: 4px; right: 8px; font-size: 10px; opacity: 0.4; z-index: 10; }
-        .wave-scale { position: absolute; left: 8px; font-size: 9px; opacity: 0.45; z-index: 10; }
-        .v-sub { font-size: 11px; font-weight: 700; opacity: 0.85; margin-right: 6px; letter-spacing: 0.5px; }
-        canvas { width: 100%; height: 100%; display: block; }
-        .vitals-container { flex: 1; display: flex; flex-direction: column; height: 100%; padding: 2px; background: #0a0a0a; }
-        .vital-block { flex: 1 1 0; margin: 2px; background: linear-gradient(180deg, #111 0%, #050505 100%); border-radius: 4px; padding: 4px 8px; display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #222; min-height: 0; overflow: hidden; transition: all 0.3s; }
-        .vital-block.alarm-state { background: linear-gradient(180deg, #4a0000 0%, #050505 100%); animation: vital-alarm 0.5s infinite; } /* 2 Hz */
-        @keyframes vital-alarm { 0%, 100% { border-left-color: var(--alarm-red); } 50% { border-left-color: #222; } }
-        .vital-block.alarm-medium { background: linear-gradient(180deg, #3a3000 0%, #050505 100%); animation: vital-alarm-amber 1.67s infinite; } /* 0.6 Hz */
-        @keyframes vital-alarm-amber { 0%, 100% { border-left-color: var(--alarm-yellow); } 50% { border-left-color: #222; } }
-        .v-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; }
-        .v-limits { font-size: 10px; opacity: 0.4; line-height: 1; font-weight: 400; text-align: right; }
-        .v-value { font-size: 5.5vh; font-weight: 900; text-align: right; line-height: 0.8; letter-spacing: -1px; margin-top: auto; transition: color 0.3s; }
-        .v-unit { font-size: 11px; text-align: right; opacity: 0.6; padding-bottom: 2px; }
-        .small-text .v-value { font-size: 3.5vh; }
-        .hr-block { color: var(--ecg-color); border-left-color: var(--ecg-color); }
-        .spo2-block { color: var(--spo2-color); border-left-color: var(--spo2-color); }
-        .spo2-block.alt-color { color: var(--spo2-color-alt); border-left-color: var(--spo2-color-alt); }
-        .bp-block { color: var(--resp-color); border-left-color: var(--resp-color); }
-        .abp-block { color: var(--abp-color); border-left-color: var(--abp-color); }
-        .resp-block { color: var(--resp-color); border-left-color: var(--resp-color); }
-        .etco2-block { color: var(--etco2-color); border-left-color: var(--etco2-color); }
-        .temp-block { color: var(--temp-color); border-left-color: var(--temp-color); }
-        .interaction-dock { height: var(--footer-h); background: #0a0a0a; display: flex; padding: 6px; gap: 4px; border-top: 2px solid #222; flex-shrink: 0; }
-        .soft-btn { flex: 1; background: var(--btn-bg); border: 1px solid #333; border-radius: 4px; color: #ccc; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; transition: all 0.1s; position: relative; }
-        .soft-btn:active { background: linear-gradient(180deg, #555 0%, #333 100%); transform: translateY(1px); }
-        .soft-btn.active { border-color: #ffd60a; color: #ffd60a; }
-        .soft-btn i { font-style: normal; font-size: 18px; margin-bottom: 3px; }
-        .btn-label { font-size: 10px; font-weight: 600; text-transform: uppercase; }
-        .btn-yellow { color: #ffd60a; }
-        .btn-red { color: #ff3b30; }
-        .btn-green { color: #30d158; }
+        html, body { height: 100%; }
+        body {
+            background: var(--bg); color: var(--text); font-family: var(--ui);
+            height: 100vh; height: 100dvh; width: 100vw; overflow: hidden;
+            display: grid; grid-template-rows: var(--header-h) 1fr var(--footer-h);
+            user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+        }
+        button { font: inherit; color: inherit; }
+        :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
         .hidden { display: none !important; }
-        .dimmed { opacity: 0.15; filter: grayscale(1); }
-        .volume-bar { position: absolute; top: -3px; left: 50%; transform: translateX(-50%); width: 80%; height: 3px; background: #222; border-radius: 2px; overflow: hidden; }
-        .volume-fill { height: 100%; background: var(--ecg-color); width: 50%; transition: width 0.2s; }
-        .nibp-cycling { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 69, 58, 0.9); padding: 20px 40px; border-radius: 8px; font-size: 18px; font-weight: 800; z-index: 100; animation: pulse-indicator 0.8s infinite; }
-        @keyframes pulse-indicator { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.05); } }
-        .color-indicator { position: absolute; bottom: 4px; left: 8px; font-size: 9px; opacity: 0.5; z-index: 10; transition: opacity 0.5s; }
-        .power-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.5s ease; }
-        .power-overlay.hidden { opacity: 0; pointer-events: none; }
-        .power-btn { width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(145deg, #1a1a1a, #0a0a0a); border: 3px solid #333; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
-        .power-btn:hover { border-color: var(--ecg-color); box-shadow: 0 0 40px rgba(48, 209, 88, 0.3); }
-        .power-btn:active { transform: scale(0.95); }
-        .power-btn.active { border-color: var(--ecg-color); box-shadow: 0 0 50px rgba(48, 209, 88, 0.5); }
-        .power-icon { font-size: 48px; color: #444; transition: color 0.3s; }
-        .power-btn.active .power-icon { color: var(--ecg-color); }
-        .power-label { color: #444; font-size: 14px; font-weight: 700; margin-top: 20px; letter-spacing: 2px; transition: color 0.3s; }
-        .power-label.active { color: var(--ecg-color); }
-        .startup-text { color: var(--ecg-color); font-size: 12px; margin-top: 30px; opacity: 0; transition: opacity 0.3s; }
-        .startup-text.visible { opacity: 1; }
-        .startup-progress { width: 200px; height: 3px; background: #222; border-radius: 2px; margin-top: 15px; overflow: hidden; opacity: 0; transition: opacity 0.3s; }
-        .startup-progress.visible { opacity: 1; }
-        .startup-progress-bar { height: 100%; background: var(--ecg-color); width: 0%; transition: width 0.1s linear; }
-        .brand-text { position: absolute; bottom: 40px; color: #333; font-size: 11px; letter-spacing: 3px; }
-        .patient-btn { cursor: pointer; padding: 4px 10px; border-radius: 4px; transition: background 0.2s; }
-        .patient-btn:hover { background: #333; }
-        .patient-btn:active { background: #444; }
-        .patient-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 8000; }
-        .patient-overlay.active { display: flex; }
-        .patient-modal { background: #1c1c1e; border-radius: 16px; padding: 24px; width: 90%; max-width: 350px; border: 1px solid #333; }
-        .patient-modal h3 { margin: 0 0 20px 0; text-align: center; color: #fff; font-size: 18px; }
-        .patient-option { background: #2c2c2e; border: 2px solid #444; border-radius: 12px; padding: 16px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s; }
-        .patient-option:hover { border-color: #666; }
-        .patient-option.selected { border-color: var(--ecg-color); background: rgba(48, 209, 88, 0.1); }
-        .patient-option-title { font-weight: 800; font-size: 16px; margin-bottom: 4px; }
-        .patient-option-desc { font-size: 11px; color: var(--resp-color); line-height: 1.4; }
-        .patient-close-btn { background: var(--ecg-color); color: black; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: 700; font-size: 14px; margin-top: 8px; cursor: pointer; }
-        .patient-close-btn:active { filter: brightness(0.8); }
-        .soft-btn.has-pending { border-color: var(--ecg-color); color: var(--ecg-color); }
-        @keyframes pending-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .soft-btn.has-pending .btn-label { animation: pending-pulse 1s infinite; }
-        .fullscreen-btn { background: #2c2c2e; border: 1px solid #444; border-radius: 4px; color: #888; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-        .fullscreen-btn:hover { background: #3a3a3c; color: #ccc; }
-        .fullscreen-btn:active { background: #444; }
-        .volume-control-bar { position: absolute; bottom: var(--footer-h); left: 0; right: 0; height: 50px; background: #1a1a1a; border-top: 1px solid #333; display: none; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; z-index: 50; }
+
+        /* ================= HEADER =================
+           Patient category | alarm message field | status | clock */
+        .monitor-header {
+            display: flex; align-items: center; gap: 8px; padding: 0 8px;
+            background: var(--chrome); border-bottom: 1px solid var(--line);
+            font-size: 14px; font-weight: 500; min-width: 0;
+        }
+        .patient-btn {
+            padding: 4px 10px; border-radius: 4px; background: var(--chrome-2); cursor: pointer;
+            white-space: nowrap; font-weight: 600;
+        }
+        .alarm-indicator {
+            flex: 1; min-width: 0; height: 28px; border-radius: 3px; padding: 0 10px;
+            display: flex; align-items: center; gap: 8px;
+            font-family: var(--num); font-size: 18px; font-weight: 600; letter-spacing: 0.3px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-dim);
+        }
+        .alarm-indicator.active-alarm { background: var(--alarm-high); color: #fff; animation: flash-high 0.5s steps(1) infinite; }
+        .alarm-indicator.medium-alarm { background: var(--alarm-med); color: #000; animation: flash-med 1.67s steps(1) infinite; }
+        .alarm-indicator.tech-alarm { background: var(--alarm-tech); color: #000; }
+        .alarm-indicator .more { font-size: 13px; opacity: 0.75; font-family: var(--ui); }
+        @keyframes flash-high { 50% { background: #5a0006; } }   /* 2 Hz */
+        @keyframes flash-med { 50% { background: #4d4000; color: var(--alarm-med); } } /* 0.6 Hz */
+        .alarm-paused-indicator, .sound-blocked {
+            display: none; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 3px;
+            font-weight: 600; font-size: 13px; white-space: nowrap; color: #000;
+        }
+        .alarm-paused-indicator { background: var(--alarm-med); }
+        .alarm-paused-indicator.active { display: flex; }
+        .sound-blocked { background: #ff9f1c; cursor: pointer; animation: flash-med 1.67s steps(1) infinite; }
+        .sound-blocked.active { display: flex; }
+        #connection-status { font-size: 12px; white-space: nowrap; }
+        #clock { font-family: var(--num); font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+        .header-right { display: flex; align-items: center; gap: 10px; }
+        .fullscreen-btn {
+            background: var(--chrome-2); border: 0; border-radius: 4px; padding: 4px 10px;
+            font-size: 12px; color: var(--text-dim); cursor: pointer;
+        }
+
+        /* ================= MAIN: waves | numerics ================= */
+        .monitor-grid {
+            display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 30%);
+            min-height: 0; overflow: hidden;
+        }
+        .wave-container { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+        .wave-row { flex: 1 1 0; position: relative; min-height: 0; border-bottom: 1px solid var(--line); }
+        .wave-row:last-child { border-bottom: 0; }
+        .wave-row canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+        .wave-label {
+            position: absolute; top: 3px; left: 8px; z-index: 2;
+            font-size: 14px; font-weight: 600; color: var(--pc);
+        }
+        .sweep-speed { position: absolute; top: 4px; right: 8px; z-index: 2; font-size: 11px; color: var(--text-dim); }
+        .wave-scale { position: absolute; z-index: 2; font-size: 11px; color: var(--pc); opacity: 0.7; }
+        #row_ecg { --pc: var(--c-ecg); } #row_spo2 { --pc: var(--c-spo2); } #row_abp { --pc: var(--c-abp); }
+        #row_etco2 { --pc: var(--c-co2); } #row_resp { --pc: var(--c-resp); }
+
+        /* numerics column: one tile per parameter, value in the parameter's colour */
+        .vitals-container {
+            display: grid; grid-auto-rows: minmax(0, 1fr); min-height: 0;
+            grid-template-columns: 1fr;
+        }
+        .vital-block {
+            --pc: var(--text);
+            position: relative; min-height: 0; overflow: hidden; cursor: pointer;
+            border-bottom: 1px solid var(--line); padding: 4px 10px 4px 10px;
+            display: grid; grid-template-rows: auto 1fr; color: var(--pc);
+            container-type: size;
+        }
+        .vital-block:last-child { border-bottom: 0; }
+        .hr-block { --pc: var(--c-ecg); } .spo2-block { --pc: var(--c-spo2); } .bp-block { --pc: var(--c-nibp); }
+        .abp-block { --pc: var(--c-abp); } .etco2-block { --pc: var(--c-co2); } .resp-block { --pc: var(--c-resp); }
+        .temp-block { --pc: var(--c-temp); }
+        .v-header { display: flex; align-items: baseline; gap: 6px; font-size: 14px; font-weight: 600; line-height: 1.2; }
+        .v-header .unit { font-size: 12px; font-weight: 400; color: var(--text-dim); }
+        .v-limits {
+            margin-left: auto; text-align: right; font-size: 11px; font-weight: 500; line-height: 1.15;
+            color: var(--pc); opacity: 0.75; font-variant-numeric: tabular-nums;
+        }
+        .v-body { display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px; min-height: 0; }
+        .v-value {
+            font-family: var(--num); font-weight: 600; line-height: 0.85; letter-spacing: -0.5px;
+            font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right;
+            font-size: clamp(26px, 8vh, 96px);
+        }
+        .v-side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding-bottom: 2px; min-width: 0; }
+        .v-sub { font-size: 13px; font-weight: 600; white-space: nowrap; }
+        .v-unit { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+        /* Values grow to fill their tile wherever container units are supported */
+        @supports (container-type: size) {
+            .v-value { font-size: min(64cqh, 30cqw); }
+            .small-text .v-value { font-size: min(52cqh, 17cqw); }
+        }
+        .dimmed { opacity: 0.28; }
+
+        /* IEC visual alarm signals on the numeric tiles */
+        .vital-block.alarm-state { animation: tile-high 0.5s steps(1) infinite; }            /* red, 2 Hz */
+        .vital-block.alarm-medium { animation: tile-med 1.67s steps(1) infinite; }           /* yellow, 0.6 Hz */
+        @keyframes tile-high { 0% { background: var(--alarm-high); color: #fff; } 50% { background: transparent; } }
+        @keyframes tile-med { 0% { background: var(--alarm-med); color: #000; } 50% { background: transparent; } }
+        .vital-block.alarm-state .v-limits, .vital-block.alarm-medium .v-limits,
+        .vital-block.alarm-state .unit, .vital-block.alarm-medium .unit { color: inherit; opacity: 1; }
+        .vital-block.span-all { grid-column: 1 / -1; }
+
+        /* ================= SOFT KEYS ================= */
+        .interaction-dock {
+            display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 6px;
+            background: var(--chrome); border-top: 1px solid var(--line);
+        }
+        .soft-btn {
+            border: 1px solid var(--line); border-radius: 5px; background: var(--chrome-2);
+            display: flex; align-items: center; justify-content: center; text-align: center;
+            font-size: 14px; font-weight: 600; line-height: 1.1; cursor: pointer; padding: 0 4px; position: relative;
+        }
+        .soft-btn:active { background: #2e333a; }
+        .soft-btn.active { border-color: var(--alarm-med); color: var(--alarm-med); }
+        .soft-btn.has-pending { border-color: var(--c-ecg); color: var(--c-ecg); }
+        .soft-btn i, .soft-btn .btn-icon { display: none; }
+
+        /* volume level bar */
+        .volume-control-bar {
+            position: fixed; left: 0; right: 0; bottom: var(--footer-h); height: 54px; z-index: 50;
+            display: none; align-items: center; gap: 6px; padding: 0 10px;
+            background: var(--chrome); border-top: 1px solid var(--line);
+        }
         .volume-control-bar.active { display: flex; }
-        .volume-control-bar .vol-label { font-size: 11px; font-weight: 700; color: #888; margin-right: 10px; min-width: 80px; }
-        .vol-btn { width: 36px; height: 36px; border-radius: 6px; background: #2c2c2e; border: 1px solid #444; color: #ccc; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
-        .vol-btn:active { background: #444; transform: scale(0.95); }
-        .vol-btn.selected { background: var(--ecg-color); color: black; border-color: var(--ecg-color); }
-        .vol-btn.selected.alarm-vol { background: var(--alarm-yellow); border-color: var(--alarm-yellow); }
-        .pause-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 500; pointer-events: none; }
+        .vol-label { font-size: 13px; font-weight: 600; min-width: 92px; }
+        .vol-btn {
+            flex: 1; height: 40px; border-radius: 5px; border: 1px solid var(--line); background: var(--chrome-2);
+            font-family: var(--num); font-size: 18px; font-weight: 600; cursor: pointer;
+        }
+        .vol-btn.selected { background: var(--c-ecg); border-color: var(--c-ecg); color: #000; }
+        .vol-btn.selected.alarm-vol { background: var(--alarm-med); border-color: var(--alarm-med); }
+        .vol-btn.disabled { opacity: 0.25; pointer-events: none; }
+
+        /* ================= OVERLAYS ================= */
+        .power-overlay {
+            position: fixed; inset: 0; z-index: 9999; background: #000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+            transition: opacity 0.4s ease;
+        }
+        .power-overlay.hidden { display: flex !important; opacity: 0; pointer-events: none; }
+        .power-btn {
+            width: 112px; height: 112px; border-radius: 50%; border: 2px solid #2c3138;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .power-btn.active { border-color: var(--c-ecg); box-shadow: 0 0 36px rgba(0, 230, 118, 0.35); }
+        .power-icon { font-size: 44px; color: #4a5059; transition: color 0.3s; }
+        .power-btn.active .power-icon { color: var(--c-ecg); }
+        .power-label { font-size: 15px; font-weight: 600; color: #6c737c; }
+        .power-label.active { color: var(--c-ecg); }
+        .startup-text { font-size: 13px; color: var(--c-ecg); opacity: 0; transition: opacity 0.3s; }
+        .startup-text.visible { opacity: 1; }
+        .startup-progress { width: 220px; height: 3px; background: #22262c; border-radius: 2px; overflow: hidden; opacity: 0; }
+        .startup-progress.visible { opacity: 1; }
+        .startup-progress-bar { height: 100%; width: 0%; background: var(--c-ecg); transition: width 0.1s linear; }
+        .brand-text { position: absolute; bottom: 28px; font-size: 12px; color: #3d434b; }
+
+        .pause-overlay {
+            position: fixed; inset: 0; z-index: 500; display: none; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.55); pointer-events: none;
+        }
         .pause-overlay.active { display: flex; }
-        .pause-text { font-size: 4rem; font-weight: 900; color: var(--alarm-yellow); animation: pause-blink 1s infinite; }
-        @keyframes pause-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .vital-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 600; }
-        .vital-overlay.active { display: flex; }
-        .vital-modal { background: #1c1c1e; border-radius: 16px; padding: 20px; width: 90%; max-width: 320px; border: 1px solid #444; }
-        .vital-modal h3 { margin: 0 0 15px 0; text-align: center; font-size: 16px; }
-        .vital-modal-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #333; }
-        .vital-modal-row:last-child { border-bottom: none; }
-        .vital-modal-label { font-size: 13px; color: var(--grey); }
+        .pause-text { font-family: var(--num); font-size: 56px; font-weight: 600; color: var(--alarm-med); }
+
+        .vital-overlay, .patient-overlay {
+            position: fixed; inset: 0; z-index: 800; display: none; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.75); padding: 16px;
+        }
+        .vital-overlay.active, .patient-overlay.active { display: flex; }
+        .vital-modal, .patient-modal {
+            width: 100%; max-width: 380px; max-height: 100%; overflow-y: auto;
+            background: var(--chrome); border: 1px solid var(--line); border-radius: 8px; padding: 16px;
+        }
+        .vital-modal h3, .patient-modal h3 { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
+        .vital-modal-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+        .vital-modal-row:last-child { border-bottom: 0; }
+        .vital-modal-label { font-size: 14px; color: var(--text-dim); }
         .vital-modal-value { display: flex; align-items: center; gap: 10px; }
-        .vital-modal-btn { width: 36px; height: 36px; border-radius: 8px; background: #2c2c2e; border: 1px solid #444; color: white; font-size: 18px; font-weight: 600; }
-        .vital-modal-btn:active { background: #444; }
-        .vital-modal-num { font-size: 18px; font-weight: 700; min-width: 50px; text-align: center; }
-        .vital-modal-close { background: #2c2c2e; color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: 700; font-size: 14px; margin-top: 15px; }
-        .vital-modal-close:active { background: #444; }
-        .color-btn { flex: 1; padding: 12px; border-radius: 8px; border: 2px solid #444; font-weight: 700; font-size: 12px; }
-        .color-btn.active { border-width: 3px; }
-        .color-btn.blue { background: rgba(100, 210, 255, 0.2); color: #64d2ff; }
-        .color-btn.blue.active { border-color: #64d2ff; }
-        .color-btn.yellow { background: rgba(255, 214, 10, 0.2); color: #ffd60a; }
-        .color-btn.yellow.active { border-color: #ffd60a; }
-        .cycle-btn { flex: 1; padding: 10px 5px; border-radius: 8px; background: #2c2c2e; border: 1px solid #444; color: #888; font-weight: 600; font-size: 11px; }
-        .cycle-btn.active { background: var(--m-green); border-color: var(--ecg-color); color: var(--ecg-color); }
-        .cycle-btn:active { background: #444; }
+        .vital-modal-btn {
+            width: 40px; height: 40px; border-radius: 6px; border: 1px solid var(--line); background: var(--chrome-2);
+            font-size: 20px; cursor: pointer;
+        }
+        .vital-modal-num { font-family: var(--num); font-size: 22px; font-weight: 600; min-width: 56px; text-align: center; }
+        .vital-modal-close, .patient-close-btn {
+            width: 100%; margin-top: 12px; height: 44px; border-radius: 6px; border: 0;
+            background: var(--chrome-2); font-weight: 600; font-size: 15px; cursor: pointer;
+        }
+        .patient-close-btn { background: var(--c-ecg); color: #000; }
+        .patient-option { border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin-bottom: 8px; cursor: pointer; }
+        .patient-option.selected { border-color: var(--c-ecg); background: rgba(0, 230, 118, 0.08); }
+        .patient-option-title { font-weight: 600; margin-bottom: 4px; }
+        .patient-option-desc { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+        .cycle-btn {
+            flex: 1; height: 38px; border-radius: 6px; border: 1px solid var(--line); background: var(--chrome-2);
+            font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .cycle-btn.active { border-color: var(--c-ecg); color: var(--c-ecg); background: var(--m-green); }
+        /* colour swatches (Menu → Display colours) */
+        .swatches { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+        .swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+        .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px #000 inset; }
+        .menu-link { width: 100%; text-align: left; padding: 12px 0; background: none; border: 0; border-bottom: 1px solid var(--line); font-size: 15px; cursor: pointer; }
+        .limit-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .limit-table td { padding: 9px 4px; border-bottom: 1px solid var(--line); }
+        .limit-table td:last-child { text-align: right; font-family: var(--num); font-size: 17px; }
+        .limit-table tr { cursor: pointer; }
+
+        .nibp-cycling {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60;
+            background: rgba(21, 24, 28, 0.94); border: 1px solid var(--c-nibp); color: var(--c-nibp);
+            padding: 14px 26px; border-radius: 6px; font-family: var(--num); font-size: 22px; font-weight: 600;
+        }
+        .monitor-grid { position: relative; }
+
+        /* ================= RESPONSIVE ================= */
+        /* Phone landscape: short screen — tiles go two-across, smaller chrome */
+        @media (max-height: 520px) {
+            :root { --header-h: 34px; --footer-h: 46px; }
+            .monitor-grid { grid-template-columns: minmax(0, 1fr) minmax(230px, 40%); }
+            .vitals-container { grid-template-columns: 1fr 1fr; }
+            .vital-block { padding: 3px 7px; border-right: 1px solid var(--line); }
+            .v-header { font-size: 12px; } .v-header .unit, .v-limits, .v-unit, .v-sub { font-size: 10px; }
+            .wave-label { font-size: 12px; } .sweep-speed { font-size: 10px; }
+            .soft-btn { font-size: 12px; }
+            .alarm-indicator { font-size: 16px; }
+            #connection-status, .fullscreen-btn { display: none; }
+        }
+        /* Portrait phones and tablets: waves on top, numbers below in a grid */
+        @media (orientation: portrait) {
+            .monitor-grid { grid-template-columns: 1fr; grid-template-rows: minmax(0, 55fr) minmax(0, 45fr); }
+            .wave-container { border-right: 0; border-bottom: 1px solid var(--line); }
+            .vitals-container { grid-template-columns: 1fr 1fr; }
+            .vital-block { border-right: 1px solid var(--line); }
+            .interaction-dock { grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr; }
+            :root { --footer-h: 96px; }
+            #connection-status, .fullscreen-btn { display: none; }
+        }
+        @media (orientation: portrait) and (min-width: 700px) {
+            .vitals-container { grid-template-columns: 1fr 1fr 1fr; }
+            .interaction-dock { grid-template-columns: repeat(6, 1fr); grid-template-rows: 1fr; }
+            :root { --footer-h: 58px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            /* alarm flashing is a safety signal and stays; only decorative transitions are removed */
+            .power-overlay, .power-btn, .startup-text { transition: none; }
+        }
     </style>
 </head>
 <body>
 
 <div class="power-overlay" id="power_overlay">
-    <div class="power-btn" id="power_btn" onclick="startPowerOn()">
+    <button class="power-btn" id="power_btn" onclick="startPowerOn()" aria-label="Power on">
         <span class="power-icon">⏻</span>
-    </div>
-    <div class="power-label" id="power_label">PRESS TO START</div>
-    <div class="startup-text" id="startup_text">INITIALIZING SYSTEM...</div>
-    <div class="startup-progress" id="startup_progress">
-        <div class="startup-progress-bar" id="startup_bar"></div>
-    </div>
-    <div class="brand-text">CLINICAL SIMULATION MONITOR</div>
+    </button>
+    <div class="power-label" id="power_label">Press to start</div>
+    <div class="startup-text" id="startup_text">Starting…</div>
+    <div class="startup-progress" id="startup_progress"><div class="startup-progress-bar" id="startup_bar"></div></div>
+    <div class="brand-text">Clinical simulation monitor</div>
 </div>
 
-<div class="pause-overlay" id="pause_overlay">
-    <div class="pause-text">⏸ PAUSED</div>
-</div>
+<div class="pause-overlay" id="pause_overlay"><div class="pause-text">Simulation paused</div></div>
 
-<div class="vital-overlay" id="vital_overlay">
+<div class="vital-overlay" id="vital_overlay" onclick="if (event.target === this) closeVitalOverlay()">
     <div class="vital-modal" id="vital_modal">
         <h3 id="vital_modal_title">Settings</h3>
         <div id="vital_modal_content"></div>
-        <button class="vital-modal-close" onclick="closeVitalOverlay()">CLOSE</button>
+        <button class="vital-modal-close" onclick="closeVitalOverlay()">Close</button>
     </div>
 </div>
 <div class="patient-overlay" id="patient_overlay">
     <div class="patient-modal">
-        <h3>SELECT PATIENT TYPE</h3>
+        <h3>Patient category</h3>
         <div class="patient-option selected" id="opt_adult" onclick="selectPatientType('adult')">
-            <div class="patient-option-title">👤 ADULT</div>
-            <div class="patient-option-desc">HR: 60-120 · SpO2: >92% · RR: 10-20 · Temp: 35-38°C</div>
+            <div class="patient-option-title">Adult</div>
+            <div class="patient-option-desc">HR 60–120 · SpO₂ &gt; 92 % · RR 10–20 · Temp 35.0–38.0 °C</div>
         </div>
         <div class="patient-option" id="opt_child" onclick="selectPatientType('child')">
-            <div class="patient-option-title">🧒 CHILD (1-8 yrs)</div>
-            <div class="patient-option-desc">HR: 70-140 · SpO2: >94% · RR: 18-30 · Temp: 36-38°C</div>
+            <div class="patient-option-title">Child (1–8 years)</div>
+            <div class="patient-option-desc">HR 70–140 · SpO₂ &gt; 94 % · RR 18–30 · Temp 36.0–38.0 °C</div>
         </div>
         <div class="patient-option" id="opt_infant" onclick="selectPatientType('infant')">
-            <div class="patient-option-title">👶 INFANT (&lt;1 yr)</div>
-            <div class="patient-option-desc">HR: 100-180 · SpO2: >94% · RR: 25-50 · Temp: 36.5-37.5°C</div>
+            <div class="patient-option-title">Infant (under 1 year)</div>
+            <div class="patient-option-desc">HR 100–180 · SpO₂ &gt; 94 % · RR 25–50 · Temp 36.5–37.5 °C</div>
         </div>
-        <button class="patient-close-btn" onclick="closePatientOverlay()">CONFIRM</button>
+        <button class="patient-close-btn" onclick="closePatientOverlay()">Done</button>
     </div>
 </div>
 
-<div class="monitor-header">
-    <div class="patient-btn" id="patient_display" onclick="openPatientOverlay()">PATIENT: ADULT ▼</div>
-    <div class="alarm-indicator" id="alarm_status">NO ALARMS</div>
-    <div class="sound-blocked" id="sound_blocked" onclick="SimAudio.unlock()">🔇 TAP FOR SOUND</div>
-    <div class="alarm-paused-indicator" id="alarm_paused_indicator">⏸ PAUSED <span id="alarm_pause_countdown">2:00</span></div>
-    <div id="connection-status" style="color: var(--alarm-red);">● DISCONNECTED</div>
-    <div style="display: flex; align-items: center; gap: 10px;">
+<header class="monitor-header">
+    <div class="patient-btn" id="patient_display" onclick="openPatientOverlay()">Adult ▾</div>
+    <div class="alarm-indicator" id="alarm_status"></div>
+    <div class="sound-blocked" id="sound_blocked" onclick="SimAudio.unlock()">🔇 Tap for sound</div>
+    <div class="alarm-paused-indicator" id="alarm_paused_indicator">Alarms paused <span id="alarm_pause_countdown">2:00</span></div>
+    <div class="header-right">
+        <div id="connection-status">● Disconnected</div>
         <div id="clock">00:00:00</div>
-        <button class="fullscreen-btn" id="fullscreen_btn" onclick="toggleFullscreen()">FULLSCREEN</button>
+        <button class="fullscreen-btn" id="fullscreen_btn" onclick="toggleFullscreen()">Full screen</button>
     </div>
-</div>
+</header>
 
-<div class="monitor-grid">
+<main class="monitor-grid">
     <div class="wave-container">
         <div id="row_ecg" class="wave-row">
-            <div class="wave-label" style="color: var(--ecg-color);">II</div>
+            <div class="wave-label">II</div>
             <div class="sweep-speed">25 mm/s</div>
             <canvas id="ecgCanvas"></canvas>
         </div>
         <div id="row_spo2" class="wave-row">
-            <div class="wave-label" id="pleth_label" style="color: var(--spo2-color);">PLETH</div>
+            <div class="wave-label" id="pleth_label">Pleth</div>
             <div class="sweep-speed">25 mm/s</div>
-            <div class="color-indicator" id="pleth_color_hint">TAP TO CHANGE COLOR</div>
             <canvas id="spo2Canvas"></canvas>
         </div>
         <div id="row_abp" class="wave-row hidden">
-            <div class="wave-label" style="color: var(--abp-color);">ABP</div>
+            <div class="wave-label">ABP</div>
             <div class="sweep-speed">25 mm/s</div>
-            <div class="wave-scale" id="abp_scale_top" style="top: 6px; left: 46px; color: var(--abp-color);">160</div>
+            <div class="wave-scale" id="abp_scale_top" style="top: 4px; left: 48px;">160</div>
+            <div class="wave-scale" style="bottom: 2px; left: 48px;">0</div>
             <canvas id="abpCanvas"></canvas>
         </div>
         <div id="row_etco2" class="wave-row hidden">
-            <div class="wave-label" style="color: var(--etco2-color);">CO2</div>
+            <div class="wave-label">CO₂</div>
             <div class="sweep-speed">6.25 mm/s</div>
-            <div class="wave-scale" id="co2_scale_top" style="top: 6px; left: 46px; color: var(--etco2-color);">50</div>
+            <div class="wave-scale" id="co2_scale_top" style="top: 4px; left: 48px;">50</div>
             <canvas id="etco2Canvas"></canvas>
         </div>
         <div id="row_resp" class="wave-row">
-            <div class="wave-label" style="color: var(--resp-color);">RESP</div>
+            <div class="wave-label">Resp</div>
             <div class="sweep-speed">6.25 mm/s</div>
             <canvas id="respCanvas"></canvas>
         </div>
@@ -226,45 +388,38 @@
 
     <div class="vitals-container">
         <div id="block_hr" class="vital-block hr-block" onclick="openVitalSettings('hr')">
-            <div class="v-header"><div>HR</div><div class="v-limits" id="hr_limits">120<br>60</div></div>
-            <div class="v-value" id="hr_val">--</div>
-            <div class="v-unit">bpm</div>
+            <div class="v-header">HR <span class="unit">bpm</span><div class="v-limits" id="hr_limits">120<br>60</div></div>
+            <div class="v-body"><div class="v-value" id="hr_val">--</div></div>
         </div>
         <div id="block_spo2" class="vital-block spo2-block" onclick="openVitalSettings('spo2')">
-            <div class="v-header"><div>SpO2</div><div class="v-limits" id="spo2_limits">100<br>92</div></div>
-            <div class="v-value" id="spo2_val">--</div>
-            <div class="v-unit"><span class="v-sub" id="spo2_pr"></span>%</div>
+            <div class="v-header">SpO₂ <span class="unit">%</span><div class="v-limits" id="spo2_limits">100<br>92</div></div>
+            <div class="v-body"><div class="v-side"><span class="v-sub" id="spo2_pr"></span></div><div class="v-value" id="spo2_val">--</div></div>
         </div>
         <div id="block_nibp" class="vital-block bp-block small-text" onclick="openVitalSettings('nibp')">
-            <div class="v-header"><div>NIBP</div><div class="v-limits" id="nibp_limits">140/90<br>90/60</div></div>
-            <div class="v-value" id="bp_val">--/--</div>
-            <div class="v-unit"><span class="v-sub" id="nibp_msg"></span>mmHg</div>
+            <div class="v-header">NBP <span class="unit">mmHg</span><div class="v-limits" id="nibp_limits">140/90<br>90/60</div></div>
+            <div class="v-body"><div class="v-side"><span class="v-sub" id="nibp_msg"></span><span class="v-unit" id="nibp_time"></span></div><div class="v-value" id="bp_val">--/--</div></div>
         </div>
         <div id="block_abp" class="vital-block abp-block hidden small-text" onclick="openVitalSettings('abp')">
-            <div class="v-header"><div>ABP</div><div class="v-limits" id="abp_limits">160/90<br>80/50</div></div>
-            <div class="v-value" id="abp_val">--/--</div>
-            <div class="v-unit">mmHg <span id="abp_map" style="opacity: 0.6;"></span></div>
+            <div class="v-header">ABP <span class="unit">mmHg</span><div class="v-limits" id="abp_limits">160<br>80</div></div>
+            <div class="v-body"><div class="v-side"><span class="v-sub" id="abp_map"></span></div><div class="v-value" id="abp_val">--/--</div></div>
         </div>
         <div id="block_etco2" class="vital-block etco2-block hidden" onclick="openVitalSettings('etco2')">
-            <div class="v-header"><div>EtCO2</div><div class="v-limits" id="etco2_limits">50<br>0</div></div>
-            <div class="v-value" id="etco2_val">--</div>
-            <div class="v-unit">mmHg</div>
+            <div class="v-header">EtCO₂ <span class="unit">mmHg</span><div class="v-limits" id="etco2_limits">50<br>30</div></div>
+            <div class="v-body"><div class="v-value" id="etco2_val">--</div></div>
         </div>
         <div id="block_resp" class="vital-block resp-block" onclick="openVitalSettings('resp')">
-            <div class="v-header"><div>RR</div><div class="v-limits" id="resp_limits">20<br>10</div></div>
-            <div class="v-value" id="resp_val">--</div>
-            <div class="v-unit">brpm</div>
+            <div class="v-header">RR <span class="unit">rpm</span><div class="v-limits" id="resp_limits">20<br>10</div></div>
+            <div class="v-body"><div class="v-value" id="resp_val">--</div></div>
         </div>
-        <div id="block_temp" class="vital-block temp-block small-text" onclick="openVitalSettings('temp')">
-            <div class="v-header"><div>TEMP</div><div class="v-limits" id="temp_limits">38.0<br>35.0</div></div>
-            <div class="v-value" id="temp_val">--.-</div>
-            <div class="v-unit">°C</div>
+        <div id="block_temp" class="vital-block temp-block" onclick="openVitalSettings('temp')">
+            <div class="v-header">Temp <span class="unit">°C</span><div class="v-limits" id="temp_limits">38.0<br>35.0</div></div>
+            <div class="v-body"><div class="v-value" id="temp_val">--.-</div></div>
         </div>
     </div>
-</div>
+</main>
 
 <div class="volume-control-bar" id="volume_control_bar">
-    <span class="vol-label" id="vol_bar_label">QRS VOLUME</span>
+    <span class="vol-label" id="vol_bar_label">QRS volume</span>
     <button class="vol-btn" onclick="setVolume(0)">0</button>
     <button class="vol-btn" onclick="setVolume(1)">1</button>
     <button class="vol-btn" onclick="setVolume(2)">2</button>
@@ -278,26 +433,14 @@
     <button class="vol-btn" onclick="setVolume(10)">10</button>
 </div>
 
-<div class="interaction-dock">
-    <div class="soft-btn" id="btn_silence" onclick="toggleAlarmSilence()">
-        <i>🔇</i><span class="btn-label">Pause Alarms</span>
-    </div>
-    <div class="soft-btn btn-yellow" id="btn_alarms" onclick="showAlarmSettings()">
-        <i>⚠</i><span class="btn-label">Alarms</span>
-    </div>
-    <div class="soft-btn btn-green" id="btn_nibp" onclick="triggerNIBP()">
-        <i>▶</i><span class="btn-label">NIBP</span>
-    </div>
-    <div class="soft-btn" id="btn_qrs_vol" onclick="toggleVolumeBar('qrs')">
-        <i>♪</i><span class="btn-label">QRS Vol</span>
-    </div>
-    <div class="soft-btn btn-yellow" id="btn_alarm_vol" onclick="toggleVolumeBar('alarm')">
-        <i>🔔</i><span class="btn-label">Alarm Vol</span>
-    </div>
-    <div class="soft-btn" onclick="showMenu()">
-        <i>⚙</i><span class="btn-label">Menu</span>
-    </div>
-</div>
+<nav class="interaction-dock">
+    <button class="soft-btn" id="btn_silence" onclick="toggleAlarmSilence()"><span class="btn-label">Pause alarms</span></button>
+    <button class="soft-btn" id="btn_alarms" onclick="showAlarmSettings()"><span class="btn-label">Alarm limits</span></button>
+    <button class="soft-btn" id="btn_nibp" onclick="triggerNIBP()"><span class="btn-label">Start NBP</span></button>
+    <button class="soft-btn" id="btn_qrs_vol" onclick="toggleVolumeBar('qrs')"><span class="btn-label">QRS volume</span></button>
+    <button class="soft-btn" id="btn_alarm_vol" onclick="toggleVolumeBar('alarm')"><span class="btn-label">Alarm volume</span></button>
+    <button class="soft-btn" id="btn_menu" onclick="showMenu()"><span class="btn-label">Menu</span></button>
+</nav>
 
 <script>
 // ==================== SOCKET & CONNECTION ====================
@@ -355,19 +498,54 @@ var LETHAL_RHYTHMS = ['vf', 'vt', 'asystole'];
 var alarmsSilenced = false;
 var alarmSilenceTimer = null;
 
-// ==================== PLETH COLOR ====================
-var plethColorBlue = true;
-function togglePlethColor() {
-    plethColorBlue = !plethColorBlue;
-    var color = plethColorBlue ? '#64d2ff' : '#ffd60a';
-    document.getElementById('pleth_label').style.color = color;
-    document.getElementById('pleth_color_hint').innerText = 'COLOR: ' + (plethColorBlue ? 'BLUE' : 'YELLOW');
-    document.getElementById('pleth_color_hint').style.opacity = '0.5';
-    var block = document.getElementById('block_spo2');
-    if (plethColorBlue) block.classList.remove('alt-color');
-    else block.classList.add('alt-color');
-    setTimeout(function() { document.getElementById('pleth_color_hint').style.opacity = '0'; }, 2000);
+// ==================== DISPLAY COLOURS ====================
+// Each parameter has a colour used by its waveform and its numbers. Changes are remembered on this device.
+var COLOR_CHOICES = [['Green', '#00e676'], ['Cyan', '#29d3ff'], ['Yellow', '#ffe03a'], ['Red', '#ff3b3b'], ['White', '#f2f2f2'],
+                     ['Orange', '#ff9f1c'], ['Magenta', '#ff5cf0'], ['Blue', '#4d8dff'], ['Lavender', '#c3a6ff']];
+var DEFAULT_COLORS = { ecg: '#00e676', spo2: '#29d3ff', abp: '#ff3b3b', nibp: '#f2f2f2', co2: '#ffe03a', resp: '#f2f2f2', temp: '#c3a6ff' };
+var PARAM_NAMES = { ecg: 'ECG and HR', spo2: 'Pleth and SpO₂', abp: 'Arterial pressure', nibp: 'NBP', co2: 'CO₂', resp: 'Respiration', temp: 'Temperature' };
+var SETTINGS_PARAM = { hr: 'ecg', spo2: 'spo2', nibp: 'nibp', abp: 'abp', etco2: 'co2', resp: 'resp', temp: 'temp' };
+var COLOR_KEY = 'simMonitorColors';
+var paramColors = loadColors();
+var currentPanel = null;
+
+function loadColors() {
+    var c = {}, k;
+    for (k in DEFAULT_COLORS) c[k] = DEFAULT_COLORS[k];
+    try {
+        var saved = JSON.parse(localStorage.getItem(COLOR_KEY) || '{}');
+        for (k in saved) if (DEFAULT_COLORS[k] && /^#[0-9a-f]{6}$/i.test(saved[k])) c[k] = saved[k];
+    } catch (e) {}
+    return c;
 }
+function applyColors() {
+    for (var k in paramColors) document.documentElement.style.setProperty('--c-' + k, paramColors[k]);
+}
+function setParamColor(k, hex) {
+    paramColors[k] = hex;
+    applyColors();
+    try { localStorage.setItem(COLOR_KEY, JSON.stringify(paramColors)); } catch (e) {}
+    if (currentPanel) openVitalSettings(currentPanel);   // refresh the open panel's swatches
+}
+function resetColors() {
+    for (var k in DEFAULT_COLORS) paramColors[k] = DEFAULT_COLORS[k];
+    applyColors();
+    try { localStorage.removeItem(COLOR_KEY); } catch (e) {}
+    if (currentPanel) openVitalSettings(currentPanel);
+}
+function colorSwatches(k) {
+    var html = '<div class="swatches">';
+    COLOR_CHOICES.forEach(function(c) {
+        html += '<button class="swatch' + (paramColors[k].toLowerCase() === c[1] ? ' active' : '') + '" style="background:' + c[1] +
+                '" title="' + c[0] + '" aria-label="' + c[0] + '" onclick="setParamColor(\'' + k + '\', \'' + c[1] + '\')"></button>';
+    });
+    return html + '</div>';
+}
+function colorRow(k) {
+    return '<div class="vital-modal-row" style="flex-direction: column; align-items: stretch; gap: 8px;">' +
+           '<span class="vital-modal-label">Colour</span>' + colorSwatches(k) + '</div>';
+}
+applyColors();
 
 // ==================== VITAL SETTINGS OVERLAY ====================
 var nibpCycleInterval = null;
@@ -386,7 +564,8 @@ function openVitalSettings(type) {
     var content = document.getElementById('vital_modal_content');
     var limits = alarmLimits[patientType];
     var html = '';
-    
+    currentPanel = type;
+
     if (type === 'hr') {
         title.innerHTML = '<span style="color: var(--ecg-color);">HR Alarm Limits</span>';
         html = '<div class="vital-modal-row"><span class="vital-modal-label">High Limit</span><div class="vital-modal-value">' +
@@ -398,15 +577,11 @@ function openVitalSettings(type) {
             '<span class="vital-modal-num" id="limit_hr_low" style="color: var(--ecg-color);">' + limits.hr_low + '</span>' +
             '<button class="vital-modal-btn" onclick="adjustLimit(\'hr_low\', 5)">+</button></div></div>';
     } else if (type === 'spo2') {
-        title.innerHTML = '<span style="color: var(--spo2-color);">SpO2 Settings</span>';
-        html = '<div class="vital-modal-row"><span class="vital-modal-label">Low Limit</span><div class="vital-modal-value">' +
+        title.innerHTML = '<span style="color: var(--spo2-color);">SpO₂ alarm limits</span>';
+        html = '<div class="vital-modal-row"><span class="vital-modal-label">Low limit</span><div class="vital-modal-value">' +
             '<button class="vital-modal-btn" onclick="adjustLimit(\'spo2_low\', -1)">−</button>' +
             '<span class="vital-modal-num" id="limit_spo2_low" style="color: var(--spo2-color);">' + limits.spo2_low + '</span>' +
-            '<button class="vital-modal-btn" onclick="adjustLimit(\'spo2_low\', 1)">+</button></div></div>' +
-            '<div class="vital-modal-row" style="flex-direction: column; align-items: stretch; gap: 10px;"><span class="vital-modal-label">Waveform Color</span>' +
-            '<div style="display: flex; gap: 10px;">' +
-            '<button class="color-btn blue ' + (plethColorBlue ? 'active' : '') + '" id="color_blue" onclick="setPlethColorFromModal(true)">BLUE</button>' +
-            '<button class="color-btn yellow ' + (!plethColorBlue ? 'active' : '') + '" id="color_yellow" onclick="setPlethColorFromModal(false)">YELLOW</button></div></div>';
+            '<button class="vital-modal-btn" onclick="adjustLimit(\'spo2_low\', 1)">+</button></div></div>';
     } else if (type === 'nibp') {
         title.innerHTML = '<span style="color: var(--resp-color);">NIBP Settings</span>';
         html = '<div class="vital-modal-row" style="flex-direction: column; align-items: stretch; gap: 10px;"><span class="vital-modal-label">Auto Cycle Interval</span>' +
@@ -463,11 +638,35 @@ function openVitalSettings(type) {
             '<button class="vital-modal-btn" onclick="adjustLimit(\'temp_low\', 0.5)">+</button></div></div>';
     }
     
+    else if (type === 'menu') {
+        title.innerText = 'Menu';
+        html = '<button class="menu-link" onclick="openVitalSettings(\'display\')">Display colours</button>' +
+               '<button class="menu-link" onclick="showAlarmSettings()">Alarm limits</button>' +
+               '<button class="menu-link" onclick="closeVitalOverlay(); openPatientOverlay();">Patient category</button>';
+    } else if (type === 'display') {
+        title.innerText = 'Display colours';
+        Object.keys(PARAM_NAMES).forEach(function(k) {
+            html += '<div class="vital-modal-row" style="flex-direction: column; align-items: stretch; gap: 8px;">' +
+                    '<span class="vital-modal-label" style="color: ' + paramColors[k] + ';">' + PARAM_NAMES[k] + '</span>' + colorSwatches(k) + '</div>';
+        });
+        html += '<button class="vital-modal-close" onclick="resetColors()">Reset to default colours</button>';
+    } else if (type === 'alarms') {
+        title.innerText = 'Alarm limits · ' + limits.label.charAt(0) + limits.label.slice(1).toLowerCase();
+        var rows = [['hr', 'HR', limits.hr_low + '–' + limits.hr_high], ['spo2', 'SpO₂', '> ' + limits.spo2_low],
+                    ['nibp', 'NBP sys', limits.nibp_sys_low + '–' + limits.nibp_sys_high], ['abp', 'ABP sys', limits.abp_sys_low + '–' + limits.abp_sys_high],
+                    ['etco2', 'EtCO₂', limits.etco2_low + '–' + limits.etco2_high], ['resp', 'RR', limits.resp_low + '–' + limits.resp_high],
+                    ['temp', 'Temp', limits.temp_low.toFixed(1) + '–' + limits.temp_high.toFixed(1)]];
+        html = '<table class="limit-table">' + rows.map(function(r) {
+            return '<tr onclick="openVitalSettings(\'' + r[0] + '\')"><td>' + r[1] + '</td><td>' + r[2] + '</td></tr>';
+        }).join('') + '</table>';
+    }
+    if (SETTINGS_PARAM[type]) html += colorRow(SETTINGS_PARAM[type]);
     content.innerHTML = html;
     overlay.classList.add('active');
 }
 
 function closeVitalOverlay() {
+    currentPanel = null;
     document.getElementById('vital_overlay').classList.remove('active');
 }
 
@@ -500,17 +699,6 @@ function updateLimitDisplays() {
     document.getElementById('abp_limits').innerHTML = l.abp_sys_high + '<br>' + l.abp_sys_low;
     document.getElementById('etco2_limits').innerHTML = l.etco2_high + '<br>' + l.etco2_low;
     document.getElementById('nibp_limits').innerHTML = l.nibp_sys_high + '/' + l.nibp_dia_high + '<br>' + l.nibp_sys_low + '/' + l.nibp_dia_low;
-}
-
-function setPlethColorFromModal(isBlue) {
-    plethColorBlue = isBlue;
-    var color = plethColorBlue ? '#64d2ff' : '#ffd60a';
-    document.getElementById('pleth_label').style.color = color;
-    var block = document.getElementById('block_spo2');
-    if (plethColorBlue) block.classList.remove('alt-color');
-    else block.classList.add('alt-color');
-    document.getElementById('color_blue').classList.toggle('active', isBlue);
-    document.getElementById('color_yellow').classList.toggle('active', !isBlue);
 }
 
 function setNibpCycle(seconds, btnEl) {
@@ -567,12 +755,12 @@ var channels = {};   // SweepChannel per canvas
 // ==================== SOCKET HANDLERS ====================
 socket.on('connect', function() { 
     socket.emit('join', { room: roomCode, type: 'monitor' }); 
-    document.getElementById('connection-status').innerHTML = '● REMOTE CONNECTED';
+    document.getElementById('connection-status').innerHTML = '● Connected';
     document.getElementById('connection-status').style.color = 'var(--ecg-color)';
 });
 
 socket.on('disconnect', function() {
-    document.getElementById('connection-status').innerHTML = '● DISCONNECTED';
+    document.getElementById('connection-status').innerHTML = '● Disconnected';
     document.getElementById('connection-status').style.color = 'var(--alarm-red)';
 });
 
@@ -681,6 +869,7 @@ function resetMonitor() {
     document.getElementById('btn_silence').classList.remove('active');
     
     document.getElementById('nibp_msg').innerText = '';
+    document.getElementById('nibp_time').textContent = '';
     showPowerScreen();
 }
 
@@ -690,9 +879,9 @@ function showPowerScreen() {
     // Put the power-on screen back to its initial look so it can be pressed again
     document.getElementById('power_btn').classList.remove('active');
     var label = document.getElementById('power_label');
-    label.classList.remove('active'); label.innerText = 'PRESS TO START';
+    label.classList.remove('active'); label.innerText = 'Press to start';
     var text = document.getElementById('startup_text');
-    text.classList.remove('visible'); text.innerText = 'INITIALIZING SYSTEM...';
+    text.classList.remove('visible'); text.innerText = 'Starting…';
     document.getElementById('startup_progress').classList.remove('visible');
     document.getElementById('startup_bar').style.width = '0%';
     document.getElementById('power_overlay').classList.remove('hidden');
@@ -745,7 +934,7 @@ function updateDisplayedValues() {
             spo2Text = Math.min(100, Math.max(0, Math.round(current.spo2 + getPhysiologicalNoise('spo2'))));
             prText = 'PR ' + Math.round(m.pr);
         } else if (performance.now() - spo2OnSince > 6000) {
-            spo2Text = '-?-'; prText = 'NO PULSE';
+            spo2Text = '-?-'; prText = 'No pulse';
         } else {
             spo2Text = '-?-';   // still searching after the probe was connected
         }
@@ -809,31 +998,88 @@ function checkAlarms() {
          displayedNIBP.dia > limits.nibp_dia_high || displayedNIBP.dia < limits.nibp_dia_low);
     alarmState.ecg = states.hr_on && LETHAL_RHYTHMS.indexOf(rhythm) >= 0;
     var priority = getAlarmPriority();
-    var cls = (priority === 'high') ? 'alarm-state' : 'alarm-medium';
     ['block_hr','block_spo2','block_resp','block_temp','block_abp','block_etco2','block_nibp'].forEach(function(id) {
         document.getElementById(id).classList.remove('alarm-state', 'alarm-medium');
     });
-    if (alarmState.hr || alarmState.ecg) document.getElementById('block_hr').classList.add(cls);
-    if (alarmState.spo2) document.getElementById('block_spo2').classList.add(cls);
-    if (alarmState.resp) document.getElementById('block_resp').classList.add(cls);
-    if (alarmState.temp) document.getElementById('block_temp').classList.add(cls);
-    if (alarmState.abp)  document.getElementById('block_abp').classList.add(cls);
-    if (alarmState.etco2) document.getElementById('block_etco2').classList.add(cls);
-    if (alarmState.nibp) document.getElementById('block_nibp').classList.add(cls);
+    // Each tile flashes at the priority of its own alarm (red = high, yellow = medium)
+    var HIGH = 'alarm-state', MED = 'alarm-medium';
+    if (alarmState.hr || alarmState.ecg) document.getElementById('block_hr').classList.add(alarmState.ecg || meas.hr === 0 ? HIGH : MED);
+    if (alarmState.spo2) document.getElementById('block_spo2').classList.add(meas.plethValid && spo2 < 80 ? HIGH : MED);
+    if (alarmState.resp) document.getElementById('block_resp').classList.add(MED);
+    if (alarmState.temp) document.getElementById('block_temp').classList.add(MED);
+    if (alarmState.abp)  document.getElementById('block_abp').classList.add(meas.abpSys < 60 ? HIGH : MED);
+    if (alarmState.etco2) document.getElementById('block_etco2').classList.add(MED);
+    if (alarmState.nibp) document.getElementById('block_nibp').classList.add(MED);
     for (var k in alarmState) { if (alarmState[k]) anyAlarm = true; }
+    // Header message field: highest priority first, several messages take turns.
+    // Visual alarms stay on while the alarm sound is paused (IEC 60601-1-8).
     var indicator = document.getElementById('alarm_status');
-    if (alarmsSilenced) {
-        indicator.style.display = 'none';
+    var msgs = isPoweredOn ? alarmMessages() : [];
+    indicator.classList.remove('active-alarm', 'medium-alarm', 'tech-alarm');
+    if (!msgs.length) {
+        indicator.textContent = '';
     } else {
-        indicator.style.display = 'flex';
-        if (anyAlarm) {
-            var isHigh = (getAlarmPriority() === 'high');
-            indicator.classList.toggle('active-alarm', isHigh); indicator.classList.toggle('medium-alarm', !isHigh);
-            indicator.innerText = isHigh ? '⚠ CRITICAL' : 'ALARM ACTIVE';
-        } else {
-            indicator.classList.remove('active-alarm', 'medium-alarm'); indicator.innerText = 'NO ALARMS'; indicator.style.color = '#ccc';
+        // Messages of the highest active priority take turns; lower ones are counted, not shown
+        var top = msgs.filter(function(x) { return x.pri === msgs[0].pri; });
+        var idx = Math.floor(performance.now() / 2500) % top.length, m = top[idx];
+        indicator.classList.add(m.pri === 'high' ? 'active-alarm' : m.pri === 'medium' ? 'medium-alarm' : 'tech-alarm');
+        indicator.textContent = (m.pri === 'high' ? '*** ' : m.pri === 'medium' ? '** ' : '') + m.text;
+        if (msgs.length > 1) {
+            var more = document.createElement('span'); more.className = 'more';
+            more.textContent = top.length > 1 ? (idx + 1) + '/' + top.length + (msgs.length > top.length ? ' +' + (msgs.length - top.length) : '')
+                                              : '+' + (msgs.length - 1) + ' more';
+            indicator.appendChild(more);
         }
     }
+}
+
+// Alarm messages in the style of a bedside monitor ("*** Asystole", "** HR 140 > 120").
+// pri: 'high' (red), 'medium' (yellow), 'tech' (cyan: equipment/signal messages)
+function alarmMessages() {
+    var l = alarmLimits[patientType], out = [];
+    function add(pri, text) { out.push({ pri: pri, text: text }); }
+    var hr = meas.hr == null ? null : Math.round(meas.hr);
+    if (states.hr_on) {
+        if (rhythm === 'vf') add('high', 'VFib/VTach');
+        else if (rhythm === 'vt') add('high', 'VTach');
+        else if (hr === 0) add('high', 'Asystole');
+        else if (rhythm === 'asystole') add('high', 'Asystole');
+        else if (hr != null && hr > l.hr_high) add('medium', 'HR ' + hr + ' > ' + l.hr_high);
+        else if (hr != null && hr < l.hr_low) add('medium', 'HR ' + hr + ' < ' + l.hr_low);
+    }
+    if (states.spo2_on) {
+        var s = Math.round(current.spo2);
+        if (meas.plethValid && s < 80) add('high', 'Desat ' + s);
+        else if (meas.plethValid && s < l.spo2_low) add('medium', 'SpO₂ ' + s + ' < ' + l.spo2_low);
+        else if (!meas.plethValid && alarmState.spo2) add('tech', 'SpO₂ no pulse');
+    }
+    if (states.abp_on) {
+        var a = Math.round(meas.abpSys);
+        if (a < 60) add('high', 'ABPs ' + a + ' < ' + l.abp_sys_low);
+        else if (a < l.abp_sys_low) add('medium', 'ABPs ' + a + ' < ' + l.abp_sys_low);
+        else if (a > l.abp_sys_high) add('medium', 'ABPs ' + a + ' > ' + l.abp_sys_high);
+    }
+    if (alarmState.nibp) {
+        var ns = displayedNIBP.sys, nd = displayedNIBP.dia;
+        if (ns > l.nibp_sys_high) add('medium', 'NBPs ' + ns + ' > ' + l.nibp_sys_high);
+        else if (ns < l.nibp_sys_low) add('medium', 'NBPs ' + ns + ' < ' + l.nibp_sys_low);
+        else if (nd > l.nibp_dia_high) add('medium', 'NBPd ' + nd + ' > ' + l.nibp_dia_high);
+        else add('medium', 'NBPd ' + nd + ' < ' + l.nibp_dia_low);
+    }
+    if (alarmState.etco2) {
+        var c = Math.round(meas.etco2);
+        add('medium', 'EtCO₂ ' + c + (c > l.etco2_high ? ' > ' + l.etco2_high : ' < ' + l.etco2_low));
+    }
+    if (alarmState.resp) {
+        var r = Math.round(current.resp);
+        add('medium', r === 0 ? 'Apnoea' : 'RR ' + r + (r > l.resp_high ? ' > ' + l.resp_high : ' < ' + l.resp_low));
+    }
+    if (alarmState.temp) {
+        var tp = current.temp.toFixed(1);
+        add('medium', 'Temp ' + tp + (current.temp > l.temp_high ? ' > ' + l.temp_high.toFixed(1) : ' < ' + l.temp_low.toFixed(1)));
+    }
+    var order = { high: 0, medium: 1, tech: 2 };
+    return out.sort(function(x, y) { return order[x.pri] - order[y.pri]; });
 }
 
 function handleSpecialRow(id, isOn) {
@@ -856,27 +1102,33 @@ setInterval(updateClock, 1000);
 
 // ==================== WAVEFORMS ====================
 // Each canvas is a SweepChannel (static/js/wave-renderer.js) drawing one engine channel at real mm/s.
-function plethColor() { return plethColorBlue ? '#64d2ff' : '#ffd60a'; }
+function plethColor() { return paramColors.spo2; }
 // Fixed pressure scales like a real monitor: 160 / 200 / 240 mmHg
 function abpScaleTop() { var s = Math.max(current.abp_sys, meas.abpSys || 0); return s > 180 ? 240 : s > 140 ? 200 : 160; }
 function co2ScaleTop() { var c = Math.max(current.etco2, meas.etco2 || 0); return c > 70 ? 100 : c > 45 ? 75 : 50; }
 
 function initCanvases() {
     function el(id) { return document.getElementById(id); }
-    channels.ecg = new SweepChannel(el('ecgCanvas'), engine, { channel: 'ecg', mmPerSec: 25, color: '#30d158',
+    channels.ecg = new SweepChannel(el('ecgCanvas'), engine, { channel: 'ecg', mmPerSec: 25, color: function() { return paramColors.ecg; },
         map: function(v, h) { return h * 0.55 - v * h * 0.3; } });
     channels.pleth = new SweepChannel(el('spo2Canvas'), engine, { channel: 'pleth', mmPerSec: 25, color: plethColor,
         map: function(v, h) { return h * 0.55 - v * h * 0.55; } });
-    channels.abp = new SweepChannel(el('abpCanvas'), engine, { channel: 'abp', mmPerSec: 25, color: '#ff453a',
+    channels.abp = new SweepChannel(el('abpCanvas'), engine, { channel: 'abp', mmPerSec: 25, color: function() { return paramColors.abp; },
         map: function(v, h) { return h * 0.92 - (v / abpScaleTop()) * h * 0.82; } });
-    channels.co2 = new SweepChannel(el('etco2Canvas'), engine, { channel: 'co2', mmPerSec: 6.25, color: '#ffd60a', fill: true,
+    channels.co2 = new SweepChannel(el('etco2Canvas'), engine, { channel: 'co2', mmPerSec: 6.25, color: function() { return paramColors.co2; }, fill: true,
         baseline: function(h) { return h * 0.9; },
         map: function(v, h) { return h * 0.9 - (v / co2ScaleTop()) * h * 0.78; } });
-    channels.resp = new SweepChannel(el('respCanvas'), engine, { channel: 'resp', mmPerSec: 6.25, color: '#d1d1d6',
+    channels.resp = new SweepChannel(el('respCanvas'), engine, { channel: 'resp', mmPerSec: 6.25, color: function() { return paramColors.resp; },
         map: function(v, h) { return h * 0.72 - v * h * 0.5; } });
 }
 
-function resizeChannels() { Object.keys(channels).forEach(function(k) { channels[k].resize(); }); }
+function layoutTiles() {
+    var grid = document.querySelector('.vitals-container');
+    var cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
+    var tiles = Array.prototype.filter.call(grid.children, function(t) { t.classList.remove('span-all'); return !t.classList.contains('hidden'); });
+    if (cols > 1 && tiles.length % cols !== 0) tiles[tiles.length - 1].classList.add('span-all');
+}
+function resizeChannels() { layoutTiles(); Object.keys(channels).forEach(function(k) { channels[k].resize(); }); }
 window.addEventListener('resize', function() { requestAnimationFrame(resizeChannels); });
 
 // ==================== ANIMATION LOOP ====================
@@ -961,10 +1213,7 @@ function updateAlarmPauseDisplay() {
     document.getElementById('alarm_pause_countdown').innerText = mins + ':' + (secs < 10 ? '0' : '') + secs;
 }
 
-function showAlarmSettings() {
-    var l = alarmLimits[patientType];
-    alert('Alarm Settings (' + l.label + '):\n\nHR: ' + l.hr_low + '-' + l.hr_high + ' bpm\nSpO2: >' + l.spo2_low + '%\nRR: ' + l.resp_low + '-' + l.resp_high + ' brpm\nTemp: ' + l.temp_low.toFixed(1) + '-' + l.temp_high.toFixed(1) + '°C');
-}
+function showAlarmSettings() { openVitalSettings('alarms'); }
 
 function triggerNIBP() {
     if (nibpCycling || !states.nibp_on) return;
@@ -975,10 +1224,10 @@ function triggerNIBP() {
     var indicator = document.createElement('div');
     indicator.className = 'nibp-cycling';
     indicator.id = 'nibp_indicator';
-    indicator.innerText = 'NIBP CYCLING...';
+    indicator.innerText = 'NBP measuring…';
     document.querySelector('.monitor-grid').appendChild(indicator);
     var countdown = 8;
-    var interval = setInterval(function() { if (--countdown > 0) indicator.innerText = 'NIBP CYCLING... ' + countdown + 's'; }, 1000);
+    var interval = setInterval(function() { if (--countdown > 0) indicator.innerText = 'NBP measuring… ' + countdown + ' s'; }, 1000);
     setTimeout(function() {
         clearInterval(interval);
         nibpCycling = false;
@@ -988,12 +1237,17 @@ function triggerNIBP() {
         // An oscillometric cuff needs arterial pulsation: no perfusing rhythm (or CPR) = failed measurement
         if (!meas.perfusing || isCPRActive) {
             displayedNIBP.hasReading = false;
-            document.getElementById('nibp_msg').innerText = 'NBP FAILED';
+            document.getElementById('nibp_msg').innerText = 'NBP failed';
+            document.getElementById('nibp_time').textContent = '';
             return;
         }
         displayedNIBP.sys = Math.round(pendingNIBP.sys);
         displayedNIBP.dia = Math.round(pendingNIBP.dia);
         displayedNIBP.hasReading = true;
+        var now = new Date();
+        document.getElementById('nibp_time').textContent =
+            now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') +
+            (nibpCycleTime ? ' · auto ' + (nibpCycleTime < 60 ? nibpCycleTime + ' s' : (nibpCycleTime / 60) + ' min') : '');
     }, 8000);
 }
 
@@ -1012,13 +1266,13 @@ function toggleVolumeBar(type) {
         activeVolumeBar = type;
         bar.classList.add('active');
         if (type === 'qrs') {
-            label.innerText = 'QRS VOLUME';
+            label.innerText = 'QRS volume';
             label.style.color = 'var(--ecg-color)';
             qrsBtn.classList.add('active');
             alarmBtn.classList.remove('active');
             updateVolumeButtons(Math.round(qrsVolume * 10), false);
         } else {
-            label.innerText = 'ALARM VOLUME';
+            label.innerText = 'Alarm volume';
             label.style.color = 'var(--alarm-yellow)';
             alarmBtn.classList.add('active');
             qrsBtn.classList.remove('active');
@@ -1070,14 +1324,14 @@ function toggleFullscreen() {
 function updateFullscreenButton() {
     var btn = document.getElementById('fullscreen_btn');
     var isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
-    btn.innerText = isFullscreen ? 'EXIT FS' : 'FULLSCREEN';
+    btn.innerText = isFullscreen ? 'Exit full screen' : 'Full screen';
 }
 
 document.addEventListener('fullscreenchange', updateFullscreenButton);
 document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
 document.addEventListener('msfullscreenchange', updateFullscreenButton);
 
-function showMenu() { alert('Menu:\n\n• Alarm Settings\n• Display Setup\n• Trend Review\n• Patient Data\n• System Settings'); }
+function showMenu() { openVitalSettings('menu'); }
 
 // ==================== POWER/STARTUP ====================
 var isPoweredOn = false;
@@ -1092,7 +1346,7 @@ function startPowerOn() {
     toggleFullscreen();
     btn.classList.add('active');
     label.classList.add('active');
-    label.innerText = 'POWERING ON';
+    label.innerText = 'Powering on';
     setTimeout(function() {
         text.classList.add('visible');
         prog.classList.add('visible');
@@ -1100,13 +1354,11 @@ function startPowerOn() {
         var interval = setInterval(function() {
             p += 2;
             bar.style.width = p + '%';
-            if (p === 20) text.innerText = 'LOADING MODULES...';
-            if (p === 40) text.innerText = 'CALIBRATING SENSORS...';
-            if (p === 60) text.innerText = 'INITIALIZING DISPLAY...';
-            if (p === 80) text.innerText = 'CONNECTING TO CONTROLLER...';
+            if (p === 20) text.innerText = 'Running self-test…';
+            if (p === 60) text.innerText = 'Connecting to controller…';
             if (p === 100) {
                 clearInterval(interval);
-                text.innerText = 'READY';
+                text.innerText = 'Ready';
                 setTimeout(function() {
                     document.getElementById('power_overlay').classList.add('hidden');
                     isPoweredOn = true;
@@ -1133,7 +1385,7 @@ function selectPatientType(type) {
     var l = alarmLimits[type];
     document.querySelectorAll('.patient-option').forEach(function(el) { el.classList.remove('selected'); });
     document.getElementById('opt_' + type).classList.add('selected');
-    document.getElementById('patient_display').innerText = 'PATIENT: ' + l.label + ' ▼';
+    document.getElementById('patient_display').innerText = l.label.charAt(0) + l.label.slice(1).toLowerCase() + ' ▾';
     updateLimitDisplays();
 }
 
@@ -1155,11 +1407,11 @@ document.addEventListener('visibilitychange', function() {
 // ==================== INIT ====================
 window.onload = function() {
     initCanvases();
+    layoutTiles();
     updateClock();
     updateLimitDisplays();
     updateDisplayedValues();
     requestAnimationFrame(animate);
-    setTimeout(function() { document.getElementById('pleth_color_hint').style.opacity = '0'; }, 5000);
 };
 </script>
 </body>
