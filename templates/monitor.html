@@ -538,9 +538,10 @@ function adjustVol(amt) {
 function checkAlarms() {
     var anyAlarm = false;
 
-    if (hr_on && !calc_hr && targetHR > 0) {
+    if (hr_on && !calc_hr) {
         var hr = parseInt(targetHR) + hrDrift;
-        currentAlarms.hr = hr > alarmLimits.hr_high || hr < alarmLimits.hr_low;
+        // no pulse is an alarm in its own right
+        currentAlarms.hr = parseInt(targetHR) === 0 || hr > alarmLimits.hr_high || hr < alarmLimits.hr_low;
     } else { currentAlarms.hr = false; }
 
     if (spo2_on && !calc_spo2 && targetHR > 0) {
@@ -784,8 +785,8 @@ function updateDisplay() {
             hrEl.className = 'card-value blinking';
         } else {
             var dHR = Math.max(0, parseInt(targetHR) + hrDrift);
-            hrEl.innerText = (targetHR > 0) ? dHR : 0;
-            hrEl.className = 'card-value active';
+            if (parseInt(targetHR) > 0) { hrEl.innerText = dHR; hrEl.className = 'card-value active'; }
+            else { hrEl.innerHTML = '<span class="card-message">NO PULSE</span>'; hrEl.className = 'card-value'; }
         }
     } else {
         hrEl.innerHTML = '<span class="card-message">CONNECT</span>';
@@ -798,8 +799,9 @@ function updateDisplay() {
             spo2El.className = 'card-value blinking';
         } else {
             var dSPO2 = Math.min(100, Math.max(0, parseInt(targetSpO2) + spo2Drift));
-            spo2El.innerText = (targetHR > 0) ? dSPO2 : 0;
-            spo2El.className = 'card-value active';
+            // a pulse oximeter cannot read saturation without a pulse
+            if (parseInt(targetHR) > 0) { spo2El.innerText = dSPO2; spo2El.className = 'card-value active'; }
+            else { spo2El.innerText = '---'; spo2El.className = 'card-value blinking'; }
         }
     } else {
         spo2El.innerHTML = '<span class="card-message">CONNECT</span>';
@@ -951,6 +953,21 @@ function runBP() {
             setTimeout(function() {
                 sysEl.classList.remove('blinking');
                 diaEl.classList.remove('blinking');
+                // the cuff needs arterial pulsation to measure
+                if (parseInt(targetHR) === 0) {
+                    sysEl.innerHTML = '<span class="card-message">---</span>';
+                    diaEl.innerHTML = '<span class="card-message">---</span>';
+                    sysEl.className = 'card-value'; diaEl.className = 'card-value';
+                    document.getElementById('map_display').innerText = 'NO READING';
+                    document.getElementById('sys_timestamp').innerText = '';
+                    document.getElementById('dia_timestamp').innerText = '';
+                    btn.classList.remove('measuring');
+                    btn.innerHTML = '<span class="bp-icon">⊘</span>START BP';
+                    btn.disabled = false;
+                    cycling = false;
+                    checkAlarms();
+                    return;
+                }
                 sysEl.innerText = t_sys;
                 diaEl.innerText = t_dia;
                 sysEl.className = 'card-value active';

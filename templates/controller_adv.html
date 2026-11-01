@@ -6,6 +6,7 @@
     <title>SimControl - Advanced Mode</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="{{ url_for('static', filename='js/sim-engine.js') }}"></script>
     <style>
         :root { --bg: #000; --card: #1c1c1e; --accent: #0a84ff; --green: #30d158; --yellow: #ffd60a; --red: #ff453a; --purple: #bf5af2; --grey: #8e8e93; --cyan: #64d2ff; --orange: #ff9500; --m-green: rgba(48, 209, 88, 0.2); --m-yellow: rgba(255, 214, 10, 0.2); --m-red: rgba(255, 69, 58, 0.2); --m-purple: rgba(191, 90, 242, 0.2); --m-grey: rgba(142, 142, 147, 0.2); --m-cyan: rgba(100, 210, 255, 0.2); --m-orange: rgba(255, 149, 0, 0.2); --dock-h: 60px; }
         body { font-family: -apple-system, sans-serif; background: var(--bg); color: white; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -86,6 +87,10 @@
         .artifact-btn { background: #2c2c2e; border: 1px solid #444; color: #888; padding: 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; }
         .artifact-btn.active { background: var(--m-yellow); color: var(--yellow); border-color: var(--yellow); }
         .sync-label { font-size: 0.6rem; color: var(--cyan); text-align: center; padding: 3px; background: var(--m-cyan); border-radius: 4px; margin-bottom: 6px; }
+        .pulse-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+        .pulse-state { font-size: 0.55rem; font-weight: 800; letter-spacing: 0.5px; }
+        .pulse-state.on { color: var(--green); }
+        .pulse-state.off { color: var(--red); }
         .queued-label { font-size: 0.6rem; margin-top: 4px; padding: 4px 6px; background: var(--m-yellow); border-radius: 4px; display: flex; align-items: center; gap: 4px; }
         .queued-label span:last-child { color: white; font-weight: 600; }
         .dock-btn.live-btn { background: var(--m-yellow); border-color: var(--yellow); color: var(--yellow); }
@@ -159,6 +164,11 @@
             <div style="display: flex; align-items: center; gap: 6px;">
                 <span style="color: var(--grey); font-size: 0.55rem; font-weight: 700;">RHYTHM</span>
                 <button class="btn-open-rhythm" onclick="toggleRhythmOverlay()" id="current_rhythm_display">NSR</button>
+            </div>
+            <div class="pulse-row">
+                <span style="color: var(--grey); font-size: 0.55rem; font-weight: 700;">PULSE</span>
+                <label class="switch"><input type="checkbox" id="pulse_on" checked onchange="updatePulseLabel(); handleChange()"><span class="slider-toggle"></span></label>
+                <span id="pulse_state" class="pulse-state on">PULSE PRESENT</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
                 <span style="color: var(--grey); font-size: 0.55rem; font-weight: 700;">ECTOPIC</span>
@@ -269,6 +279,10 @@
             <button class="fine-btn" onclick="adjust('etco2_s', -1)">−</button>
             <input type="range" id="etco2_s" class="s-etco2" min="0" max="100" value="35" oninput="handleChange()">
             <button class="fine-btn" onclick="adjust('etco2_s', 1)">+</button>
+        </div>
+        <div class="artifact-grid">
+            <button class="artifact-btn co2-btn active" id="co2_normal" onclick="setCo2Shape('normal')">Normal</button>
+            <button class="artifact-btn co2-btn" id="co2_obstructive" onclick="setCo2Shape('obstructive')">Obstructive</button>
         </div>
         <div class="trend-indicator" id="trend_etco2" style="display: none;">
             <div class="trend-bar"><div class="trend-progress" id="trend_progress_etco2"></div></div>
@@ -399,7 +413,8 @@ const socket = io();
 const urlParams = new URLSearchParams(window.location.search);
 const room = urlParams.get('room');
 let currentRhythm = 'nsr', queuedRhythm = null, queuedRhythmName = null;
-let liveSync = false, currentArtifact = 'normal';
+let liveSync = false, currentArtifact = 'normal', co2Shape = 'normal';
+const RHYTHMS = SimEngine.RHYTHMS;
 let isPaused = false, isCPRActive = false;
 let ectopicEnabled = false;
 let ectopicFrequency = 'medium';
@@ -552,19 +567,17 @@ function updateTrends() {
     }
 }
 
-function sendTrendUpdate(vital, value) {
-    var data = {
-        room: room,
-        type: 'vitals_adv',
-        hr: vital === 'hr' ? value : lastOr('hr', 'hr_s'),
-        spo2: vital === 'spo2' ? value : lastOr('spo2', 'spo2_s'),
-        resp: vital === 'resp' ? value : lastOr('resp', 'resp_s'),
-        etco2: vital === 'etco2' ? value : lastOr('etco2', 'etco2_s'),
-        temp: vital === 'temp' ? value : lastOr('temp', 'temp_s'),
-        sys: lastOr('sys', 'sys_s'),
-        dia: lastOr('dia', 'dia_s'),
-        abp_sys: lastOr('sys', 'sys_s'),
-        abp_dia: lastOr('dia', 'dia_s'),
+// Every vitals update is built here so all paths send the same fields.
+// `values` overrides the numbers (used by trends); everything else comes from the controls.
+function buildVitals(values, rhythmToSend) {
+    values = values || {};
+    function v(key, sliderId) { return values[key] !== undefined ? values[key] : lastOr(key, sliderId); }
+    var sys = v('sys', 'sys_s'), dia = v('dia', 'dia_s');
+    return {
+        room: room, type: 'vitals_adv',
+        hr: v('hr', 'hr_s'), spo2: v('spo2', 'spo2_s'), resp: v('resp', 'resp_s'),
+        etco2: v('etco2', 'etco2_s'), temp: v('temp', 'temp_s'),
+        sys: sys, dia: dia, abp_sys: sys, abp_dia: dia,
         hr_on: document.getElementById('hr_on').checked,
         spo2_on: document.getElementById('spo2_on').checked,
         resp_on: document.getElementById('resp_on').checked,
@@ -572,38 +585,20 @@ function sendTrendUpdate(vital, value) {
         nibp_on: document.getElementById('nibp_on').checked,
         abp_on: document.getElementById('abp_on').checked,
         temp_on: document.getElementById('temp_on').checked,
-        rhythm: currentRhythm,
-        artifact: currentArtifact,
+        rhythm: rhythmToSend || currentRhythm,
+        pulse: document.getElementById('pulse_on').checked,
+        artifact: currentArtifact, co2_shape: co2Shape,
         ectopic: ectopicEnabled, ectopic_freq: ectopicFrequency
     };
-    socket.emit('update_vitals', data);
+}
+
+function sendTrendUpdate(vital, value) {
+    var o = {}; o[vital] = value;
+    socket.emit('update_vitals', buildVitals(o));
 }
 
 function sendBPTrendUpdate(sys, dia) {
-    var data = {
-        room: room,
-        type: 'vitals_adv',
-        hr: lastOr('hr', 'hr_s'),
-        spo2: lastOr('spo2', 'spo2_s'),
-        resp: lastOr('resp', 'resp_s'),
-        etco2: lastOr('etco2', 'etco2_s'),
-        temp: lastOr('temp', 'temp_s'),
-        sys: sys,
-        dia: dia,
-        abp_sys: sys,
-        abp_dia: dia,
-        hr_on: document.getElementById('hr_on').checked,
-        spo2_on: document.getElementById('spo2_on').checked,
-        resp_on: document.getElementById('resp_on').checked,
-        etco2_on: document.getElementById('etco2_on').checked,
-        nibp_on: document.getElementById('nibp_on').checked,
-        abp_on: document.getElementById('abp_on').checked,
-        temp_on: document.getElementById('temp_on').checked,
-        rhythm: currentRhythm,
-        artifact: currentArtifact,
-        ectopic: ectopicEnabled, ectopic_freq: ectopicFrequency
-    };
-    socket.emit('update_vitals', data);
+    socket.emit('update_vitals', buildVitals({ sys: sys, dia: dia }));
 }
 
 function completeTrend(vital) {
@@ -643,18 +638,7 @@ function sendFullVitals() {
         etco2: parseFloat(document.getElementById('etco2_s').value)
     };
     
-    socket.emit('update_vitals', {
-        room: room, type: 'vitals_adv',
-        hr: document.getElementById('hr_s').value, hr_on: document.getElementById('hr_on').checked,
-        spo2: document.getElementById('spo2_s').value, spo2_on: document.getElementById('spo2_on').checked,
-        resp: document.getElementById('resp_s').value, resp_on: document.getElementById('resp_on').checked,
-        etco2: document.getElementById('etco2_s').value, etco2_on: document.getElementById('etco2_on').checked,
-        sys: sys, dia: dia, abp_sys: sys, abp_dia: dia,
-        nibp_on: document.getElementById('nibp_on').checked, abp_on: document.getElementById('abp_on').checked,
-        temp: document.getElementById('temp_s').value, temp_on: document.getElementById('temp_on').checked,
-        rhythm: rhythmToSend, artifact: currentArtifact,
-        ectopic: ectopicEnabled, ectopic_freq: ectopicFrequency
-    });
+    socket.emit('update_vitals', buildVitals(lastSentValues, rhythmToSend));
     updateQueuedRhythmUI();
 }
 
@@ -733,6 +717,8 @@ function setAllNormal() {
     document.getElementById('queued_rhythm_name').innerText = queuedRhythmName;
     document.getElementById('current_rhythm_display').classList.add('has-queued');
     setArtifact('normal');
+    setCo2Shape('normal');
+    document.getElementById('pulse_on').checked = true; updatePulseLabel();
     if (isCPRActive) toggleCPR();
     // Cancel all trends
     ['hr', 'spo2', 'resp', 'temp', 'etco2'].forEach(function(v) { cancelTrend(v); });
@@ -877,7 +863,16 @@ function toggleSpecialCard(type) {
 }
 
 function setRhythm(id, name, description) {
+    var R = RHYTHMS[id];
+    if (R) {
+        name = R.name; description = R.desc;
+        // Typical rate and pulse for this rhythm. Both can still be changed before pressing UPDATE.
+        document.getElementById('hr_s').value = R.rate == null ? 0 : R.rate;
+        document.getElementById('pulse_on').checked = R.pulse;
+        updatePulseLabel();
+    }
     queuedRhythm = id; queuedRhythmName = name;
+    updateDisplayValues();
     document.querySelectorAll('.r-btn').forEach(function(b) {
         b.classList.remove('queued');
         if (b.id === 'r_' + currentRhythm) b.classList.add('active');
@@ -903,9 +898,22 @@ function updateQueuedRhythmUI() {
     }
 }
 
+function updatePulseLabel() {
+    var on = document.getElementById('pulse_on').checked, el = document.getElementById('pulse_state');
+    el.innerText = on ? 'PULSE PRESENT' : 'PULSELESS';
+    el.className = 'pulse-state ' + (on ? 'on' : 'off');
+}
+
+function setCo2Shape(shape) {
+    co2Shape = shape;
+    document.getElementById('co2_normal').classList.toggle('active', shape === 'normal');
+    document.getElementById('co2_obstructive').classList.toggle('active', shape === 'obstructive');
+    if (liveSync) sendVitals();
+}
+
 function setArtifact(type) {
     currentArtifact = type;
-    document.querySelectorAll('.artifact-btn').forEach(function(b) { b.classList.remove('active'); });
+    ['art_normal', 'art_lowperf', 'art_noise', 'art_motion'].forEach(function(id) { document.getElementById(id).classList.remove('active'); });
     document.getElementById('art_' + (type === 'low_perfusion' ? 'lowperf' : type)).classList.add('active');
     if (liveSync) sendVitals();
 }
@@ -919,7 +927,8 @@ function updateDisplayValues() {
     var sys = document.getElementById('sys_s').value;
     var dia = document.getElementById('dia_s').value;
 
-    document.getElementById('hr_val').innerHTML = hr + '<span class="unit">BPM</span>';
+    var shownRhythm = queuedRhythm || currentRhythm;
+    document.getElementById('hr_val').innerHTML = (RHYTHMS[shownRhythm] && RHYTHMS[shownRhythm].rate == null ? '---' : hr) + '<span class="unit">BPM</span>';
     document.getElementById('spo2_val').innerHTML = spo2 + '<span class="unit">%</span>';
     document.getElementById('resp_val').innerHTML = resp + '<span class="unit">BRPM</span>';
     document.getElementById('etco2_val').innerHTML = etco2 + '<span class="unit">mmHg</span>';
@@ -980,6 +989,8 @@ function resetSim() {
         document.getElementById('ect_medium').classList.add('active');
         
         setArtifact('normal');
+        setCo2Shape('normal');
+        document.getElementById('pulse_on').checked = true; updatePulseLabel();
         currentRhythm = 'nsr'; queuedRhythm = null; queuedRhythmName = null;
         document.querySelectorAll('.r-btn').forEach(function(b) { b.classList.remove('active', 'queued'); });
         document.getElementById('r_nsr').classList.add('active');

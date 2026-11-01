@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Clinical Monitor - Advanced Mode</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='js/sim-engine.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/wave-renderer.js') }}"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        :root { --bg-color: #000; --ecg-color: #30d158; --spo2-color: #64d2ff; --spo2-color-alt: #ffd60a; --resp-color: #8e8e93; --abp-color: #ff453a; --etco2-color: #8e8e93; --temp-color: #bf5af2; --header-bg: #1a1a1a; --header-h: 40px; --footer-h: 70px; --btn-bg: linear-gradient(180deg, #333 0%, #1a1a1a 100%); --alarm-red: #ff3b30; --alarm-yellow: #ffd60a; --grey: #8e8e93; --m-green: rgba(48, 209, 88, 0.2); }
+        :root { --bg-color: #000; --ecg-color: #30d158; --spo2-color: #64d2ff; --spo2-color-alt: #ffd60a; --resp-color: #d1d1d6; --abp-color: #ff453a; --etco2-color: #ffd60a; --temp-color: #bf5af2; --header-bg: #1a1a1a; --header-h: 40px; --footer-h: 70px; --btn-bg: linear-gradient(180deg, #333 0%, #1a1a1a 100%); --alarm-red: #ff3b30; --alarm-yellow: #ffd60a; --grey: #8e8e93; --m-green: rgba(48, 209, 88, 0.2); }
         body, html { background: var(--bg-color); color: white; font-family: 'Segoe UI', 'Roboto', sans-serif; height: 100vh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; user-select: none; }
         .monitor-header { height: var(--header-h); background: var(--header-bg); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; font-size: 14px; font-weight: 700; border-bottom: 1px solid #333; flex-shrink: 0; }
         .alarm-indicator { width: 100px; height: 30px; border-radius: 4px; background: #1a1a1a; border: 2px solid #333; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; transition: all 0.3s; }
@@ -20,6 +22,8 @@
         .wave-row { flex: 1 1 0; position: relative; border-bottom: 1px solid #1a1a1a; min-height: 0; background: #000; cursor: pointer; }
         .wave-label { position: absolute; top: 4px; left: 8px; font-size: 14px; font-weight: 800; z-index: 10; }
         .sweep-speed { position: absolute; top: 4px; right: 8px; font-size: 10px; opacity: 0.4; z-index: 10; }
+        .wave-scale { position: absolute; left: 8px; font-size: 9px; opacity: 0.45; z-index: 10; }
+        .v-sub { font-size: 11px; font-weight: 700; opacity: 0.85; margin-right: 6px; letter-spacing: 0.5px; }
         canvas { width: 100%; height: 100%; display: block; }
         .vitals-container { flex: 1; display: flex; flex-direction: column; height: 100%; padding: 2px; background: #0a0a0a; }
         .vital-block { flex: 1 1 0; margin: 2px; background: linear-gradient(180deg, #111 0%, #050505 100%); border-radius: 4px; padding: 4px 8px; display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #222; min-height: 0; overflow: hidden; transition: all 0.3s; }
@@ -198,11 +202,13 @@
         <div id="row_abp" class="wave-row hidden">
             <div class="wave-label" style="color: var(--abp-color);">ABP</div>
             <div class="sweep-speed">25 mm/s</div>
+            <div class="wave-scale" id="abp_scale_top" style="top: 6px; left: 46px; color: var(--abp-color);">160</div>
             <canvas id="abpCanvas"></canvas>
         </div>
         <div id="row_etco2" class="wave-row hidden">
-            <div class="wave-label" style="color: var(--etco2-color);">EtCO2</div>
-            <div class="sweep-speed">12.5 mm/s</div>
+            <div class="wave-label" style="color: var(--etco2-color);">CO2</div>
+            <div class="sweep-speed">6.25 mm/s</div>
+            <div class="wave-scale" id="co2_scale_top" style="top: 6px; left: 46px; color: var(--etco2-color);">50</div>
             <canvas id="etco2Canvas"></canvas>
         </div>
         <div id="row_resp" class="wave-row">
@@ -221,12 +227,12 @@
         <div id="block_spo2" class="vital-block spo2-block" onclick="openVitalSettings('spo2')">
             <div class="v-header"><div>SpO2</div><div class="v-limits" id="spo2_limits">100<br>92</div></div>
             <div class="v-value" id="spo2_val">--</div>
-            <div class="v-unit">%</div>
+            <div class="v-unit"><span class="v-sub" id="spo2_pr"></span>%</div>
         </div>
         <div id="block_nibp" class="vital-block bp-block small-text" onclick="openVitalSettings('nibp')">
             <div class="v-header"><div>NIBP</div><div class="v-limits" id="nibp_limits">140/90<br>90/60</div></div>
             <div class="v-value" id="bp_val">--/--</div>
-            <div class="v-unit">mmHg</div>
+            <div class="v-unit"><span class="v-sub" id="nibp_msg"></span>mmHg</div>
         </div>
         <div id="block_abp" class="vital-block abp-block hidden small-text" onclick="openVitalSettings('abp')">
             <div class="v-header"><div>ABP</div><div class="v-limits" id="abp_limits">160/90<br>80/50</div></div>
@@ -301,41 +307,40 @@ var displayedNIBP = { sys: null, dia: null, hasReading: false };
 var states = { hr_on: false, spo2_on: false, resp_on: false, etco2_on: false, nibp_on: false, abp_on: false, temp_on: false };
 var rhythm = 'nsr';
 var artifact = 'normal';
-// ==================== ECTOPIC BEATS ====================
+// ==================== PHYSIOLOGY ENGINE ====================
+// Waveforms and the HR, pulse rate, ABP and EtCO2 numbers all come from the engine
+// (static/js/sim-engine.js), so they stay consistent with each other and with the rhythm.
+var engine = new SimEngine.Engine();
+var pulsePresent = true;          // controller's Pulse setting (defaults per rhythm)
+var co2Shape = 'normal';          // 'normal' | 'obstructive'
 var ectopicEnabled = false;
-var ectopicFrequency = 'medium'; // 'low', 'medium', 'frequent'
-var ectopicInProgress = false;
-var ectopicBeatNumber = 0;
-var nextEctopicIn = 0;
-var prevBeatPhase = 0;
+var ectopicFrequency = 'medium';  // 'low', 'medium', 'frequent'
+var meas = engine.measured();     // latest values measured from the signals
+var spo2OnSince = 0;              // when the SpO2 probe was connected (ms, performance clock)
 
-function scheduleNextEctopic() {
-    switch(ectopicFrequency) {
-        case 'low':      nextEctopicIn = 10 + Math.floor(Math.random() * 11); break; // every 10-20 beats
-        case 'medium':   nextEctopicIn = 5 + Math.floor(Math.random() * 4);   break; // every 5-8 beats
-        case 'frequent': nextEctopicIn = 1 + Math.floor(Math.random() * 2);   break; // every 1-2 beats
-        default:         nextEctopicIn = 5 + Math.floor(Math.random() * 4);
-    }
-}
 // ==================== MASTER CONTROL STATE ====================
 var isPaused = false;
 var isCPRActive = false;
-var shockActive = false;
-var resetPending = false;
-var shockStartTime = 0;
 var masterVolume = 0.5;
 
-// ==================== SLEW RATES ====================
-var SLEW_RATES = { hr: 0.3, spo2: 0.1, resp: 0.1, etco2: 0.2, abp_sys: 1.0, abp_dia: 1.0, temp: 0.02 };
+// ==================== SMOOTH TRANSITIONS ====================
+// Values move toward what the instructor set at a physiological pace (units per second)
+var SLEW_PER_SEC = { hr: 20, spo2: 6, resp: 6, etco2: 12, abp_sys: 60, abp_dia: 60, temp: 1.2 };
 
-function updateTransitions() {
-    if (isPaused) return;
-    var keys = ['hr', 'spo2', 'resp', 'etco2', 'abp_sys', 'abp_dia', 'temp'];
-    keys.forEach(function(key) {
-        var diff = target[key] - current[key];
-        var step = SLEW_RATES[key] || 0.1;
+function updateTransitions(dtMs) {
+    Object.keys(SLEW_PER_SEC).forEach(function(key) {
+        var diff = target[key] - current[key], step = SLEW_PER_SEC[key] * dtMs / 1000;
         if (Math.abs(diff) <= step) current[key] = target[key];
         else current[key] += (diff > 0 ? 1 : -1) * step;
+    });
+}
+
+function syncEngine() {
+    engine.set({
+        rhythm: rhythm, rate: current.hr, pulse: pulsePresent,
+        ectopic: ectopicEnabled, ectopicFreq: ectopicFrequency, artifact: artifact,
+        resp: current.resp, etco2: current.etco2, co2Shape: co2Shape,
+        sys: current.abp_sys, dia: current.abp_dia, cpr: isCPRActive
     });
 }
 
@@ -521,10 +526,11 @@ var alarmVolume = 0.5;
 var activeVolumeBar = null;
 
 function playHeartbeatBeep() {
-    if (!isPoweredOn || !states.hr_on || current.hr <= 0 || qrsVolume === 0 || isPaused) return;
+    if (!isPoweredOn || qrsVolume === 0 || isPaused) return;
     var osc = audioCtx.createOscillator();
     var gain = audioCtx.createGain();
-    var clampedSpo2 = Math.max(40, Math.min(100, current.spo2));
+    // pitch follows SpO2 only while there is a valid saturation reading
+    var clampedSpo2 = (states.spo2_on && meas.plethValid) ? Math.max(40, Math.min(100, current.spo2)) : 100;
     var freq = 200 + ((clampedSpo2 - 40) / 60) * 680;
     osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
     var vol = qrsVolume * masterVolume * 0.15;
@@ -538,9 +544,9 @@ function playHeartbeatBeep() {
 // ==================== IEC 60601-1-8 ALARM SYSTEM ====================
 function getAlarmPriority() {
     // HIGH: life-threatening
-    if (states.hr_on && current.hr === 0) return 'high';                          // asystole
-    if (states.spo2_on && current.spo2 < 80) return 'high';                      // critical desat
-    if (states.abp_on && current.abp_sys < 60) return 'high';                    // severe hypotension
+    if (states.hr_on && meas.hr === 0) return 'high';                            // asystole
+    if (states.spo2_on && meas.plethValid && current.spo2 < 80) return 'high';   // critical desat
+    if (states.abp_on && meas.abpSys < 60) return 'high';                        // severe hypotension / no output
     if (states.hr_on && LETHAL_RHYTHMS.indexOf(rhythm) >= 0) return 'high';      // lethal rhythms
 
     // MEDIUM: out of range
@@ -620,11 +626,8 @@ function playShockSound() {
 }
 
 // ==================== WAVEFORM STATE ====================
-var cardiacX = 0, respX = 0;
-var lastEcgY = 0, lastSpo2Y = 0, lastRespY = 0, lastAbpY = 0, lastEtco2Y = 0;
 var nibpCycling = false;
-var SWEEP_SPEEDS = { cardiac: 2.5, resp: 0.8 };
-var ecgCtx, spo2Ctx, respCtx, abpCtx, etco2Ctx;
+var channels = {};   // SweepChannel per canvas
 
 // ==================== SOCKET HANDLERS ====================
 socket.on('connect', function() { 
@@ -643,6 +646,7 @@ function num(v, fallback) { var n = parseFloat(v); return isNaN(n) ? fallback : 
 
 socket.on('update_monitor', function(data) {
     if (data.type === 'vitals_adv') {
+        var spo2WasOn = states.spo2_on;
         // Only an explicit reset from the controller returns the monitor to the power screen.
         // (Previously turning every parameter off also did this, which killed the monitor mid-scenario.)
         if (data.is_reset) { resetMonitor(); return; }
@@ -665,19 +669,26 @@ socket.on('update_monitor', function(data) {
         }
         states.hr_on = !!data.hr_on; states.spo2_on = !!data.spo2_on; states.resp_on = !!data.resp_on;
         states.etco2_on = !!data.etco2_on; states.nibp_on = !!data.nibp_on; states.abp_on = !!data.abp_on; states.temp_on = !!data.temp_on;
-        if (data.rhythm) rhythm = data.rhythm;
+        if (data.rhythm && SimEngine.RHYTHMS[data.rhythm] && data.rhythm !== rhythm) {
+            rhythm = data.rhythm;
+            current.hr = target.hr;   // rhythm changes are abrupt, not a slow ramp
+        }
+        // Pulse: sent by the controller; older controllers fall back to the rhythm's default
+        if (typeof data.pulse !== 'undefined') pulsePresent = !!data.pulse;
+        else if (data.rhythm && SimEngine.RHYTHMS[data.rhythm]) pulsePresent = SimEngine.RHYTHMS[data.rhythm].pulse;
+        if (data.co2_shape) co2Shape = data.co2_shape;
         if (data.artifact) artifact = data.artifact;
         if (typeof data.ectopic !== 'undefined') {
             ectopicEnabled = !!data.ectopic;
             // Accept both spellings — the controller historically sent 'ectopicFrequency' on some paths
             var freq = data.ectopic_freq || data.ectopicFrequency;
             if (freq) ectopicFrequency = freq;
-            if (ectopicEnabled && nextEctopicIn === 0) scheduleNextEctopic();
         }
+        if (states.spo2_on && !spo2WasOn) spo2OnSince = performance.now();
         handleSpecialRow('abp', states.abp_on);
         handleSpecialRow('etco2', states.etco2_on);
     } else if (data.type === 'rhythm') {
-        rhythm = data.rhythm;
+        if (SimEngine.RHYTHMS[data.rhythm]) rhythm = data.rhythm;
     } else if (data.type === 'nibp_reading') {
         pendingNIBP.sys = num(data.sys, pendingNIBP.sys);
         pendingNIBP.dia = num(data.dia, pendingNIBP.dia);
@@ -709,44 +720,33 @@ socket.on('update_monitor', function(data) {
 socket.on('system_shutdown_trigger', function() { showPowerScreen(); });
 
 function triggerShock() {
-    shockActive = true;
-    shockStartTime = performance.now();
-    playShockSound();
-    setTimeout(function() { shockActive = false; }, 1000);
+    engine.shock();
+    if (isPoweredOn) playShockSound();
 }
 
 function resetMonitor() {
-    // Block all waveform drawing immediately
-    resetPending = true;
-    
     current = { hr: 75, spo2: 98, resp: 16, etco2: 35, abp_sys: 120, abp_dia: 80, temp: 36.8 };
     target = { hr: 75, spo2: 98, resp: 16, etco2: 35, abp_sys: 120, abp_dia: 80, temp: 36.8 };
     pendingNIBP = { sys: 120, dia: 80, hasPending: false };
     displayedNIBP = { sys: null, dia: null, hasReading: false };
     document.getElementById('btn_nibp').classList.remove('has-pending');
     states = { hr_on: false, spo2_on: false, resp_on: false, etco2_on: false, nibp_on: false, abp_on: false, temp_on: false };
-    rhythm = 'nsr'; artifact = 'normal';
-    ectopicEnabled = false; ectopicInProgress = false; ectopicFrequency = 'medium';
-    cardiacX = 0; respX = 0;
-    isPaused = false; isCPRActive = false; shockActive = false;
+    rhythm = 'nsr'; artifact = 'normal'; pulsePresent = true; co2Shape = 'normal';
+    ectopicEnabled = false; ectopicFrequency = 'medium';
+    isPaused = false; isCPRActive = false;
+    // fresh physiology, blank screens
+    engine = new SimEngine.Engine();
+    meas = engine.measured();
+    Object.keys(channels).forEach(function(k) { channels[k].engine = engine; channels[k].reset(); });
     document.getElementById('pause_overlay').classList.remove('active');
     handleSpecialRow('abp', false);
     handleSpecialRow('etco2', false);
-    alarmState = { hr: false, spo2: false, resp: false, nibp: false, temp: false, etco2: false };
+    alarmState = { hr: false, spo2: false, resp: false, nibp: false, abp: false, temp: false, etco2: false, ecg: false };
     alarmsSilenced = false;
     document.getElementById('btn_silence').classList.remove('active');
     
-    // Clear canvases repeatedly to catch any frames drawn between resets
-    clearAllCanvases();
-    setTimeout(clearAllCanvases, 50);
-    setTimeout(clearAllCanvases, 100);
+    document.getElementById('nibp_msg').innerText = '';
     showPowerScreen();
-    // Release the drawing block after 500ms — by then states are
-    // guaranteed to be applied and no stale frames can sneak through
-    setTimeout(function() {
-        clearAllCanvases();
-        resetPending = false;
-    }, 500);
 }
 
 function showPowerScreen() {
@@ -762,14 +762,6 @@ function showPowerScreen() {
     document.getElementById('startup_bar').style.width = '0%';
     document.getElementById('power_overlay').classList.remove('hidden');
     releaseWakeLock();
-}
-
-function clearAllCanvases() {
-    if (ecgCtx) { ecgCtx.clearRect(0, 0, ecgCtx.canvas.width, ecgCtx.canvas.height); lastEcgY = ecgCtx.canvas.height / 2; }
-    if (spo2Ctx) { spo2Ctx.clearRect(0, 0, spo2Ctx.canvas.width, spo2Ctx.canvas.height); lastSpo2Y = spo2Ctx.canvas.height * 0.7; }
-    if (respCtx) { respCtx.clearRect(0, 0, respCtx.canvas.width, respCtx.canvas.height); lastRespY = respCtx.canvas.height * 0.5; }
-    if (abpCtx) { abpCtx.clearRect(0, 0, abpCtx.canvas.width, abpCtx.canvas.height); lastAbpY = abpCtx.canvas.height * 0.5; }
-    if (etco2Ctx) { etco2Ctx.clearRect(0, 0, etco2Ctx.canvas.width, etco2Ctx.canvas.height); lastEtco2Y = etco2Ctx.canvas.height * 0.85; }
 }
 
 var noiseTarget = { hr: 0, spo2: 0, resp: 0, etco2: 0, temp: 0, abp_sys: 0, abp_dia: 0 };
@@ -805,30 +797,49 @@ function getPhysiologicalNoise(vital) {
 }
 
 function updateDisplayedValues() {
-    var hrDisplay = states.hr_on ? Math.round(current.hr + getPhysiologicalNoise('hr')) : null;
-    var spo2Display = states.spo2_on ? Math.min(100, Math.max(0, Math.round(current.spo2 + getPhysiologicalNoise('spo2')))) : null;
-    var respDisplay = states.resp_on ? Math.max(0, Math.round(current.resp + getPhysiologicalNoise('resp'))) : null;
-    var etco2Display = states.etco2_on ? Math.max(0, Math.round(current.etco2 + getPhysiologicalNoise('etco2'))) : null;
+    var m = meas;
+    // HR is counted from the ECG; VF cannot be counted (-?-)
+    var hrText = '--';
+    if (states.hr_on) hrText = m.hr == null ? '-?-' : Math.round(m.hr);
+    // SpO2 needs a detectable pulse: without one the monitor shows -?- and NO PULSE
+    var spo2Text = '--', prText = '';
+    if (states.spo2_on) {
+        if (m.plethValid) {
+            spo2Text = Math.min(100, Math.max(0, Math.round(current.spo2 + getPhysiologicalNoise('spo2'))));
+            prText = 'PR ' + Math.round(m.pr);
+        } else if (performance.now() - spo2OnSince > 6000) {
+            spo2Text = '-?-'; prText = 'NO PULSE';
+        } else {
+            spo2Text = '-?-';   // still searching after the probe was connected
+        }
+    }
+    var respText = states.resp_on ? Math.max(0, Math.round(current.resp + (current.resp > 0 ? getPhysiologicalNoise('resp') : 0))) : '--';
+    var etco2Text = states.etco2_on ? Math.max(0, Math.round(m.etco2)) : '--';
     var tempDisplay = states.temp_on ? (current.temp + getPhysiologicalNoise('temp')) : null;
-    var abpSysNoise = getPhysiologicalNoise('abp_sys');
-    var abpDiaNoise = getPhysiologicalNoise('abp_dia');
 
-    document.getElementById('hr_val').innerText = hrDisplay !== null ? hrDisplay : '--';
-    document.getElementById('spo2_val').innerText = spo2Display !== null ? spo2Display : '--';
-    document.getElementById('resp_val').innerText = respDisplay !== null ? respDisplay : '--';
-    document.getElementById('etco2_val').innerText = etco2Display !== null ? etco2Display : '--';
-    
+    document.getElementById('hr_val').innerText = hrText;
+    document.getElementById('spo2_val').innerText = spo2Text;
+    document.getElementById('spo2_pr').innerText = prText;
+    document.getElementById('resp_val').innerText = respText;
+    document.getElementById('etco2_val').innerText = etco2Text;
+
     if (states.nibp_on && displayedNIBP.hasReading) {
         document.getElementById('bp_val').innerText = displayedNIBP.sys + '/' + displayedNIBP.dia;
     } else {
         document.getElementById('bp_val').innerText = '--/--';
     }
-    
-    var abpSysNoise = getPhysiologicalNoise('abp_sys', current.abp_sys);
-    var abpDiaNoise = getPhysiologicalNoise('abp_dia', current.abp_dia);
-    document.getElementById('abp_val').innerText = states.abp_on ? Math.round(current.abp_sys + abpSysNoise) + '/' + Math.round(current.abp_dia + abpDiaNoise) : '--/--';
+
+    if (states.abp_on) {
+        document.getElementById('abp_val').innerText = Math.round(m.abpSys) + '/' + Math.round(m.abpDia);
+        document.getElementById('abp_map').innerText = '(' + Math.round(m.abpMap) + ')';
+    } else {
+        document.getElementById('abp_val').innerText = '--/--';
+        document.getElementById('abp_map').innerText = '';
+    }
     document.getElementById('temp_val').innerText = tempDisplay !== null ? tempDisplay.toFixed(1) : '--.-';
-    
+    document.getElementById('abp_scale_top').innerText = abpScaleTop();
+    document.getElementById('co2_scale_top').innerText = co2ScaleTop();
+
     updateBlockState('hr', states.hr_on); updateBlockState('spo2', states.spo2_on);
     updateBlockState('resp', states.resp_on); updateBlockState('etco2', states.etco2_on);
     updateBlockState('nibp', states.nibp_on); updateBlockState('temp', states.temp_on);
@@ -843,17 +854,18 @@ function updateBlockState(id, isOn) {
 function checkAlarms() {
     var anyAlarm = false;
     var limits = alarmLimits[patientType];
-    var hr = Math.round(current.hr);
+    var hr = meas.hr == null ? null : Math.round(meas.hr);
     var spo2 = Math.round(current.spo2);
     var resp = Math.round(current.resp);
     var temp = current.temp;
-    alarmState.hr = states.hr_on && (hr > limits.hr_high || hr < limits.hr_low);
-    alarmState.spo2 = states.spo2_on && spo2 < limits.spo2_low;
+    alarmState.hr = states.hr_on && hr != null && (hr > limits.hr_high || hr < limits.hr_low);
+    // SpO2: low saturation, or no detectable pulse once the probe has had time to find one
+    alarmState.spo2 = states.spo2_on && (meas.plethValid ? spo2 < limits.spo2_low : performance.now() - spo2OnSince > 6000);
     alarmState.resp = states.resp_on && (resp > limits.resp_high || resp < limits.resp_low);
     alarmState.temp = states.temp_on && (temp > limits.temp_high || temp < limits.temp_low);
-    var abpSys = Math.round(current.abp_sys);
+    var abpSys = Math.round(meas.abpSys);
     alarmState.abp = states.abp_on && (abpSys > limits.abp_sys_high || abpSys < limits.abp_sys_low);
-    var etco2 = Math.round(current.etco2);
+    var etco2 = Math.round(meas.etco2);
     alarmState.etco2 = states.etco2_on && (etco2 > limits.etco2_high || etco2 < limits.etco2_low);
     alarmState.nibp = states.nibp_on && displayedNIBP.hasReading &&
         (displayedNIBP.sys > limits.nibp_sys_high || displayedNIBP.sys < limits.nibp_sys_low ||
@@ -890,19 +902,13 @@ function handleSpecialRow(id, isOn) {
     var block = document.getElementById('block_' + id);
     var row = document.getElementById('row_' + id);
     if (isOn) {
-        block.classList.remove('hidden'); row.classList.remove('hidden');
-        if (id === 'abp' && !abpCtx) {
-            var canvas = document.getElementById('abpCanvas');
-            canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight;
-            abpCtx = canvas.getContext('2d'); lastAbpY = canvas.height * 0.5;
+        if (row.classList.contains('hidden')) {
+            block.classList.remove('hidden'); row.classList.remove('hidden');
+            requestAnimationFrame(resizeChannels);   // row heights change when a row appears
         }
-        if (id === 'etco2' && !etco2Ctx) {
-            var canvas = document.getElementById('etco2Canvas');
-            canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight;
-            etco2Ctx = canvas.getContext('2d'); lastEtco2Y = canvas.height * 0.85;
-        }
-    } else {
+    } else if (!row.classList.contains('hidden')) {
         block.classList.add('hidden'); row.classList.add('hidden');
+        requestAnimationFrame(resizeChannels);
     }
 }
 
@@ -910,599 +916,73 @@ function handleSpecialRow(id, isOn) {
 function updateClock() { document.getElementById('clock').innerText = new Date().toTimeString().split(' ')[0]; }
 setInterval(updateClock, 1000);
 
-// ==================== CANVAS SETUP ====================
+// ==================== WAVEFORMS ====================
+// Each canvas is a SweepChannel (static/js/wave-renderer.js) drawing one engine channel at real mm/s.
+function plethColor() { return plethColorBlue ? '#64d2ff' : '#ffd60a'; }
+// Fixed pressure scales like a real monitor: 160 / 200 / 240 mmHg
+function abpScaleTop() { var s = Math.max(current.abp_sys, meas.abpSys || 0); return s > 180 ? 240 : s > 140 ? 200 : 160; }
+function co2ScaleTop() { var c = Math.max(current.etco2, meas.etco2 || 0); return c > 70 ? 100 : c > 45 ? 75 : 50; }
+
 function initCanvases() {
-    var ecgCanvas = document.getElementById('ecgCanvas');
-    var spo2Canvas = document.getElementById('spo2Canvas');
-    var respCanvas = document.getElementById('respCanvas');
-    [ecgCanvas, spo2Canvas, respCanvas].forEach(function(c) { c.width = c.clientWidth; c.height = c.clientHeight; });
-    ecgCtx = ecgCanvas.getContext('2d');
-    spo2Ctx = spo2Canvas.getContext('2d');
-    respCtx = respCanvas.getContext('2d');
-    lastEcgY = ecgCanvas.height / 2;
-    lastSpo2Y = spo2Canvas.height * 0.7;
-    lastRespY = respCanvas.height * 0.5;
+    function el(id) { return document.getElementById(id); }
+    channels.ecg = new SweepChannel(el('ecgCanvas'), engine, { channel: 'ecg', mmPerSec: 25, color: '#30d158',
+        map: function(v, h) { return h * 0.55 - v * h * 0.3; } });
+    channels.pleth = new SweepChannel(el('spo2Canvas'), engine, { channel: 'pleth', mmPerSec: 25, color: plethColor,
+        map: function(v, h) { return h * 0.55 - v * h * 0.55; } });
+    channels.abp = new SweepChannel(el('abpCanvas'), engine, { channel: 'abp', mmPerSec: 25, color: '#ff453a',
+        map: function(v, h) { return h * 0.92 - (v / abpScaleTop()) * h * 0.82; } });
+    channels.co2 = new SweepChannel(el('etco2Canvas'), engine, { channel: 'co2', mmPerSec: 6.25, color: '#ffd60a', fill: true,
+        baseline: function(h) { return h * 0.9; },
+        map: function(v, h) { return h * 0.9 - (v / co2ScaleTop()) * h * 0.78; } });
+    channels.resp = new SweepChannel(el('respCanvas'), engine, { channel: 'resp', mmPerSec: 6.25, color: '#d1d1d6',
+        map: function(v, h) { return h * 0.72 - v * h * 0.5; } });
 }
 
-window.addEventListener('resize', function() {
-    ['ecgCanvas', 'spo2Canvas', 'respCanvas', 'abpCanvas', 'etco2Canvas'].forEach(function(id) {
-        var c = document.getElementById(id);
-        if (c) { c.width = c.clientWidth; c.height = c.clientHeight; }
-    });
-});
-
-// ==================== WAVEFORM GENERATORS ====================
-function getCPRArtifact(phase) {
-    var cprPhase = (phase * 2) % 1;
-    return Math.sin(cprPhase * Math.PI * 2) * 3 + (Math.random() - 0.5) * 1.5;
-}
-
-function getShockArtifact(timeSinceShock) {
-    if (timeSinceShock > 500) return 0;
-    var t = timeSinceShock / 500;
-    var spike = Math.exp(-t * 8) * Math.sin(t * 50) * 15;
-    return spike + (Math.random() - 0.5) * 3 * (1 - t);
-}
-
-// Helper: standard P-QRS-T complex
-function getNormalComplex(p) {
-    if (p >= 0.08 && p < 0.18) return Math.sin(((p - 0.08) / 0.10) * Math.PI) * 1.2;
-    if (p >= 0.18 && p < 0.28) return 0;
-    if (p >= 0.28 && p < 0.30) return -Math.sin(((p - 0.28) / 0.02) * Math.PI) * 0.8;
-    if (p >= 0.30 && p < 0.32) return ((p - 0.30) / 0.02) * 10;
-    if (p >= 0.32 && p < 0.34) return 10 - ((p - 0.32) / 0.02) * 12;
-    if (p >= 0.34 && p < 0.37) return -2 + ((p - 0.34) / 0.03) * 2;
-    if (p >= 0.37 && p < 0.45) return 0;
-    if (p >= 0.45 && p < 0.60) return Math.sin(((p - 0.45) / 0.15) * Math.PI) * 2.2;
-    return 0;
-}
-
-// PVC shape parameters — randomised per beat
-var pvcParams = { upAmp: 8, downAmp: -7, width: 1.0 };
-
-function randomisePVC() {
-    pvcParams.upAmp = 6 + Math.random() * 4;          // 6-10
-    pvcParams.downAmp = -(5 + Math.random() * 4);      // -5 to -9
-    pvcParams.width = 0.85 + Math.random() * 0.3;      // 0.85-1.15 (stretches/compresses timing)
-}
-
-function getPVCComplex(p) {
-    var w = pvcParams.width;
-    var up = pvcParams.upAmp;
-    var down = pvcParams.downAmp;
-    
-    if (p < 0.08 * w) return (Math.random() - 0.5) * 0.15;
-    if (p < 0.13 * w) return ((p - 0.08 * w) / (0.05 * w)) * up;
-    if (p < 0.20 * w) return up - ((p - 0.13 * w) / (0.07 * w)) * (up - down);
-    if (p < 0.28 * w) return down - ((p - 0.20 * w) / (0.08 * w)) * down;
-    if (p < 0.38 * w) return 0;
-    return (Math.random() - 0.5) * 0.08;
-}
-
-function getEcgPoint(phase, rhythmType) {
-    var cprArtifact = isCPRActive ? getCPRArtifact(phase) : 0;
-    var baseValue = 0;
-
-    switch(rhythmType) {
-        case 'vf':
-            baseValue = (Math.sin(phase * 47) + Math.sin(phase * 31) + Math.random() * 0.5) * 2.5;
-            break;
-
-        case 'asystole':
-            baseValue = (Math.random() - 0.5) * 0.15;
-            break;
-
-        case 'vt':
-            var vtPhase = phase % 1;
-            if (vtPhase < 0.4) baseValue = Math.sin((vtPhase / 0.4) * Math.PI) * 7 * (1 - Math.abs(vtPhase / 0.4 - 0.5) * 0.5);
-            else baseValue = (Math.random() - 0.5) * 0.3;
-            break;
-
-        case 'pea':
-            baseValue = getEcgPoint(phase, 'nsr');
-            return baseValue + cprArtifact;
-
-        case 'afib': {
-            var afibBase = (Math.sin(phase * 23) + Math.sin(phase * 17)) * 0.3;
-            var afibPhase = (phase + Math.sin(phase * 7) * 0.1) % 1;
-            if (afibPhase > 0.40 && afibPhase < 0.54) {
-                if (afibPhase < 0.42) baseValue = afibBase + (afibPhase - 0.40) * 50;
-                else if (afibPhase < 0.46) baseValue = afibBase + 1 + ((afibPhase - 0.42) / 0.04) * 7;
-                else if (afibPhase < 0.50) baseValue = afibBase + 8 - ((afibPhase - 0.46) / 0.04) * 16;
-                else baseValue = afibBase - 8 + ((afibPhase - 0.50) / 0.04) * 8;
-            } else if (afibPhase > 0.60 && afibPhase < 0.75) {
-                baseValue = afibBase + Math.sin(((afibPhase - 0.60) / 0.15) * Math.PI) * 1.5;
-            } else {
-                baseValue = afibBase;
-            }
-            break;
-        }
-
-        // SVT — narrow QRS, no P waves, rapid rate
-        case 'svt': {
-            var sp = phase % 1;
-            if (sp < 0.28) baseValue = (Math.random() - 0.5) * 0.15;
-            else if (sp >= 0.28 && sp < 0.30) baseValue = -Math.sin(((sp - 0.28) / 0.02) * Math.PI) * 0.6;
-            else if (sp >= 0.30 && sp < 0.32) baseValue = ((sp - 0.30) / 0.02) * 10;
-            else if (sp >= 0.32 && sp < 0.34) baseValue = 10 - ((sp - 0.32) / 0.02) * 12;
-            else if (sp >= 0.34 && sp < 0.37) baseValue = -2 + ((sp - 0.34) / 0.03) * 2;
-            else if (sp >= 0.37 && sp < 0.42) baseValue = 0;
-            else if (sp >= 0.42 && sp < 0.55) baseValue = Math.sin(((sp - 0.42) / 0.13) * Math.PI) * 1.5;
-            else baseValue = 0;
-            break;
-        }
-
-        // Atrial Flutter — sawtooth baseline with QRS
-        case 'aflutter': {
-            var fp = phase % 1;
-            var flutterFreq = 5;
-            var sawtooth = ((fp * flutterFreq) % 1);
-            var flutterWave;
-            if (sawtooth < 0.85) flutterWave = -sawtooth / 0.85;
-            else flutterWave = -1 + ((sawtooth - 0.85) / 0.15);
-            flutterWave *= 1.8;
-            if (fp >= 0.30 && fp < 0.32) baseValue = flutterWave + ((fp - 0.30) / 0.02) * 10;
-            else if (fp >= 0.32 && fp < 0.34) baseValue = flutterWave + 10 - ((fp - 0.32) / 0.02) * 12;
-            else if (fp >= 0.34 && fp < 0.37) baseValue = flutterWave + (-2 + ((fp - 0.34) / 0.03) * 2);
-            else baseValue = flutterWave;
-            break;
-        }
-
-        // 1st Degree AV Block — prolonged PR interval (>0.20s)
-        // Normal P-QRS-T but with extended isoelectric gap between P and QRS
-        case 'avb1': {
-            var p1 = phase % 1;
-            // P wave — normal position, clearly visible
-            if (p1 >= 0.05 && p1 < 0.15) baseValue = Math.sin(((p1 - 0.05) / 0.10) * Math.PI) * 1.5;
-            // Prolonged PR interval — long flat segment
-            else if (p1 >= 0.15 && p1 < 0.38) baseValue = 0;
-            // Q wave
-            else if (p1 >= 0.38 && p1 < 0.40) baseValue = -Math.sin(((p1 - 0.38) / 0.02) * Math.PI) * 0.8;
-            // R wave up
-            else if (p1 >= 0.40 && p1 < 0.42) baseValue = ((p1 - 0.40) / 0.02) * 10;
-            // R wave down into S
-            else if (p1 >= 0.42 && p1 < 0.44) baseValue = 10 - ((p1 - 0.42) / 0.02) * 12;
-            // S wave recovery
-            else if (p1 >= 0.44 && p1 < 0.47) baseValue = -2 + ((p1 - 0.44) / 0.03) * 2;
-            // ST segment
-            else if (p1 >= 0.47 && p1 < 0.55) baseValue = 0;
-            // T wave
-            else if (p1 >= 0.55 && p1 < 0.70) baseValue = Math.sin(((p1 - 0.55) / 0.15) * Math.PI) * 2.2;
-            else baseValue = 0;
-            break;
-        }
-
-        // 2nd Degree Type I (Wenckebach) — progressive PR then dropped QRS
-        // 4-beat cycle: beats 0-2 conduct with lengthening PR, beat 3 is P-wave only
-        case 'avb2_type1': {
-            var wp = phase % 1;
-            var wenckBeat = ectopicBeatNumber % 4;
-
-            // P wave is ALWAYS present at the same position
-            var pWave = 0;
-            if (wp >= 0.05 && wp < 0.15) pWave = Math.sin(((wp - 0.05) / 0.10) * Math.PI) * 1.5;
-
-            if (wenckBeat === 3) {
-                // Dropped beat — only P wave, no QRS/T
-                baseValue = pWave + (Math.random() - 0.5) * 0.05;
-            } else {
-                // PR delay increases each beat: 0.22, 0.30, 0.38
-                var prEnd = 0.22 + (wenckBeat * 0.08);
-                
-                if (wp < prEnd) {
-                    // We're still in the P-wave or PR segment
-                    baseValue = pWave;
-                } else {
-                    // QRS-T complex starts after variable PR
-                    var qp = wp - prEnd; // local time within QRS-T
-                    // Q wave
-                    if (qp >= 0 && qp < 0.02) baseValue = pWave + (-Math.sin((qp / 0.02) * Math.PI) * 0.8);
-                    // R wave up
-                    else if (qp >= 0.02 && qp < 0.04) baseValue = pWave + ((qp - 0.02) / 0.02) * 10;
-                    // R wave down into S
-                    else if (qp >= 0.04 && qp < 0.06) baseValue = pWave + 10 - ((qp - 0.04) / 0.02) * 12;
-                    // S wave recovery
-                    else if (qp >= 0.06 && qp < 0.09) baseValue = pWave + (-2 + ((qp - 0.06) / 0.03) * 2);
-                    // ST segment
-                    else if (qp >= 0.09 && qp < 0.15) baseValue = 0;
-                    // T wave
-                    else if (qp >= 0.15 && qp < 0.30) baseValue = Math.sin(((qp - 0.15) / 0.15) * Math.PI) * 2.2;
-                    else baseValue = 0;
-                }
-            }
-            break;
-        }
-
-        // 2nd Degree Type II (Mobitz) — constant PR, intermittent dropped QRS
-        // 3-beat cycle: beats 0,1 conduct normally; beat 2 is P-wave only
-        case 'avb2_type2': {
-            var m2p = phase % 1;
-            var mobitzBeat = ectopicBeatNumber % 3;
-
-            // P wave always present at same position
-            var pWaveM2 = 0;
-            if (m2p >= 0.08 && m2p < 0.18) pWaveM2 = Math.sin(((m2p - 0.08) / 0.10) * Math.PI) * 1.5;
-
-            if (mobitzBeat === 2) {
-                // Dropped beat — P wave only, flat after
-                baseValue = pWaveM2 + (Math.random() - 0.5) * 0.05;
-            } else {
-                // Conducted beat — constant PR interval, then QRS-T
-                if (m2p < 0.28) {
-                    baseValue = pWaveM2;
-                } else {
-                    // Q wave
-                    if (m2p >= 0.28 && m2p < 0.30) baseValue = -Math.sin(((m2p - 0.28) / 0.02) * Math.PI) * 0.8;
-                    // R wave up
-                    else if (m2p >= 0.30 && m2p < 0.32) baseValue = ((m2p - 0.30) / 0.02) * 10;
-                    // R wave down into S
-                    else if (m2p >= 0.32 && m2p < 0.34) baseValue = 10 - ((m2p - 0.32) / 0.02) * 12;
-                    // S recovery
-                    else if (m2p >= 0.34 && m2p < 0.37) baseValue = -2 + ((m2p - 0.34) / 0.03) * 2;
-                    // ST segment
-                    else if (m2p >= 0.37 && m2p < 0.45) baseValue = 0;
-                    // T wave
-                    else if (m2p >= 0.45 && m2p < 0.60) baseValue = Math.sin(((m2p - 0.45) / 0.15) * Math.PI) * 2.2;
-                    else baseValue = 0;
-                }
-            }
-            break;
-        }
-
-        // 3rd Degree (Complete) Heart Block — full AV dissociation
-        // Two independent oscillators: atrial P waves at ~2x ventricular rate
-        // Ventricular escape has wide QRS (ventricular origin)
-        case 'avb3': {
-            var v3p = phase % 1; // ventricular phase (tied to HR setting)
-            
-            // Atrial oscillator runs independently at ~2.2x ventricular rate
-            // The 0.37 offset ensures P waves drift through different positions
-            var atrialRate = 2.2;
-            var atrialPhase1 = ((phase * atrialRate) + 0.0) % 1;
-            var atrialPhase2 = ((phase * atrialRate) + 0.5) % 1;
-            
-            // P waves — two per ventricular cycle, marching independently
-            var pWaveSum = 0;
-            if (atrialPhase1 >= 0.0 && atrialPhase1 < 0.14)
-                pWaveSum += Math.sin((atrialPhase1 / 0.14) * Math.PI) * 1.3;
-            if (atrialPhase2 >= 0.0 && atrialPhase2 < 0.14)
-                pWaveSum += Math.sin((atrialPhase2 / 0.14) * Math.PI) * 1.3;
-            
-            // Ventricular escape complex — wide QRS, no relationship to P waves
-            var qrsValue = 0;
-            // Wide Q
-            if (v3p >= 0.28 && v3p < 0.32) qrsValue = -((v3p - 0.28) / 0.04) * 3;
-            // Wide R wave up
-            else if (v3p >= 0.32 && v3p < 0.37) qrsValue = -3 + ((v3p - 0.32) / 0.05) * 15;
-            // R wave down into deep S
-            else if (v3p >= 0.37 && v3p < 0.43) qrsValue = 12 - ((v3p - 0.37) / 0.06) * 18;
-            // S wave recovery (slow, wide)
-            else if (v3p >= 0.43 && v3p < 0.50) qrsValue = -6 + ((v3p - 0.43) / 0.07) * 6;
-            // ST segment
-            else if (v3p >= 0.50 && v3p < 0.57) qrsValue = 0;
-            // Broad T wave
-            else if (v3p >= 0.57 && v3p < 0.75) qrsValue = Math.sin(((v3p - 0.57) / 0.18) * Math.PI) * 2.0;
-            
-            // Sum: P waves ride on top of whatever the ventricle is doing
-            baseValue = pWaveSum + qrsValue;
-            break;
-        }
-
-        // Junctional — retrograde P, narrow QRS, slow rate
-        case 'junctional': {
-            var jp = phase % 1;
-            if (jp >= 0.22 && jp < 0.28) baseValue = -Math.sin(((jp - 0.22) / 0.06) * Math.PI) * 0.8;
-            else if (jp >= 0.30 && jp < 0.32) baseValue = ((jp - 0.30) / 0.02) * 10;
-            else if (jp >= 0.32 && jp < 0.34) baseValue = 10 - ((jp - 0.32) / 0.02) * 12;
-            else if (jp >= 0.34 && jp < 0.37) baseValue = -2 + ((jp - 0.34) / 0.03) * 2;
-            else if (jp >= 0.37 && jp < 0.45) baseValue = 0;
-            else if (jp >= 0.45 && jp < 0.60) baseValue = Math.sin(((jp - 0.45) / 0.15) * Math.PI) * 2.2;
-            else baseValue = 0;
-            break;
-        }
-
-        // Idioventricular — wide QRS, no P waves, very slow
-        case 'idioventricular': {
-            var ip = phase % 1;
-            if (ip < 0.25) baseValue = (Math.random() - 0.5) * 0.1;
-            else if (ip >= 0.25 && ip < 0.30) baseValue = -((ip - 0.25) / 0.05) * 5;
-            else if (ip >= 0.30 && ip < 0.36) baseValue = -5 + ((ip - 0.30) / 0.06) * 17;
-            else if (ip >= 0.36 && ip < 0.44) baseValue = 12 - ((ip - 0.36) / 0.08) * 18;
-            else if (ip >= 0.44 && ip < 0.50) baseValue = -6 + ((ip - 0.44) / 0.06) * 6;
-            else if (ip >= 0.55 && ip < 0.75) baseValue = -Math.sin(((ip - 0.55) / 0.20) * Math.PI) * 2.0;
-            else baseValue = (Math.random() - 0.5) * 0.1;
-            break;
-        }
-
-        // Agonal — very slow, wide, irregular, dying heart
-        case 'agonal': {
-            var ap = phase % 1;
-            if (ap < 0.30) baseValue = (Math.random() - 0.5) * 0.2;
-            else if (ap >= 0.30 && ap < 0.38) baseValue = ((ap - 0.30) / 0.08) * 6;
-            else if (ap >= 0.38 && ap < 0.48) baseValue = 6 - ((ap - 0.38) / 0.10) * 12;
-            else if (ap >= 0.48 && ap < 0.55) baseValue = -6 + ((ap - 0.48) / 0.07) * 6;
-            else if (ap >= 0.55 && ap < 0.80) baseValue = (Math.random() - 0.5) * 0.3 - Math.sin(((ap - 0.55) / 0.25) * Math.PI) * 1.0;
-            else baseValue = (Math.random() - 0.5) * 0.2;
-            break;
-        }
-
-        // NSR (default) — with ectopic beat support
-        default: {
-            var p = phase % 1;
-            if (ectopicEnabled && ectopicInProgress) {
-                baseValue = getPVCComplex(p);
-            } else {
-                baseValue = getNormalComplex(p);
-            }
-        }
-    }
-    return baseValue + cprArtifact;
-}
-
-function getPlethPoint(phase, respPhaseVal, artifactType) {
-    var p = phase % 1;
-    var respMod = 1.0 + Math.sin(respPhaseVal * Math.PI * 2) * 0.12;
-    if (isCPRActive) {
-        return getCPRArtifact(phase) * 0.8 + (Math.random() - 0.5) * 2;
-    }
-    if (artifactType === 'noise') return (Math.random() - 0.5) * 8;
-    if (artifactType === 'motion') return (Math.sin(phase * 15) * 6) + getPlethPoint(phase, respPhaseVal, 'normal');
-    if (artifactType === 'low_perfusion') return getPlethPoint(phase, respPhaseVal, 'normal') * 0.3;
-    var sat = Math.max(60, Math.min(100, current.spo2));
-    var satScale = (sat - 60) / 40;
-    var finalAmp = 0.2 + (0.8 * satScale);
-    var t1 = 0.13, w1 = 0.12;
-    var systolic = Math.exp(-Math.pow(p - t1, 2) / (2 * w1 * w1));
-    var t2 = 0.42, w2 = 0.22;
-    var dicrotic = 0.35 * Math.exp(-Math.pow(p - t2, 2) / (2 * w2 * w2));
-    return -8.5 * (systolic + dicrotic) * respMod * finalAmp;
-}
-
-function getRespPoint(phase, respRate) {
-    var p = phase % 1;
-    var breathPortion = Math.min(1.0, (respRate / 15) * 0.6);
-    if (p > breathPortion) return 0;
-    var bp = p / breathPortion;
-    if (bp < 0.4) return -Math.sin((bp / 0.4) * Math.PI / 2) * 0.9;
-    if (bp < 0.45) return -0.9;
-    if (bp < 0.95) return -0.9 * Math.cos(((bp - 0.45) / 0.50) * Math.PI / 2);
-    return 0;
-}
-
-function getAbpPoint(phase, sys, dia) {
-    if (isCPRActive) {
-        var cprPhase = (phase * 2) % 1;
-        return Math.sin(cprPhase * Math.PI * 2) * 0.3 + (Math.random() - 0.5) * 0.1;
-    }
-    var p = phase % 1;
-    var pp = sys - dia;
-    var map = dia + (pp / 3);
-    var nSys = (sys - map) / 40;
-    var nDia = (dia - map) / 40;
-    if (p < 0.05) return nDia + (nSys - nDia) * (p / 0.05);
-    if (p < 0.10) return nSys - (nSys - nDia) * 0.15 * ((p - 0.05) / 0.05);
-    if (p < 0.20) return nSys * 0.85 - ((p - 0.10) / 0.10) * (nSys * 0.85 - nDia * 0.3);
-    if (p < 0.25) return nDia * 0.3 + Math.sin(((p - 0.20) / 0.05) * Math.PI) * 0.15;
-    if (p < 0.95) { var t = (p - 0.25) / 0.70; return (nDia * 0.3 + 0.15) * Math.exp(-t * 2) + nDia * (1 - Math.exp(-t * 2)); }
-    return nDia;
-}
-
-function getEtco2Point(phase, etco2Value) {
-    var p = phase % 1;
-    var amp = etco2Value / 35;
-    if (p < 0.15) return 0;
-    if (p < 0.22) { var t = (p - 0.15) / 0.07; return (t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2) * amp; }
-    if (p < 0.70) return amp + ((p - 0.22) / 0.48) * 0.05 * amp;
-    if (p < 0.77) { var t = (p - 0.70) / 0.07; return (amp + 0.05 * amp) * (1 - (t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2)); }
-    return 0;
-}
+function resizeChannels() { Object.keys(channels).forEach(function(k) { channels[k].resize(); }); }
+window.addEventListener('resize', function() { requestAnimationFrame(resizeChannels); });
 
 // ==================== ANIMATION LOOP ====================
-var lastBeepTime = 0, lastAlarmTime = 0;
+var lastFrame = null, lastAlarmTime = 0, lastNumbers = 0;
 
-function animate(currentTime) {
-    currentTime = currentTime || 0;
-    if (!isPaused) { updateTransitions(); }
-    updateDisplayedValues();
-    if (isPaused || resetPending) { requestAnimationFrame(animate); return; }
-    
-    var hrRate = Math.max(1, current.hr);
-    var respRate = Math.max(1, current.resp);
-    var canvasWidth = ecgCtx ? ecgCtx.canvas.width : 800;
-    var respCanvasWidth = respCtx ? respCtx.canvas.width : 800;
-    var pixelsPerSecond = SWEEP_SPEEDS.cardiac * 60;
-    var respPixelsPerSecond = SWEEP_SPEEDS.resp * 60;
-    var beatDurationPixels = pixelsPerSecond / (hrRate / 60);
-    var breathDurationPixels = respPixelsPerSecond / (respRate / 60);
-    
-    var newCardiacX = cardiacX + SWEEP_SPEEDS.cardiac;
-    var newRespX = respX + SWEEP_SPEEDS.resp;
-    var cardiacWrapped = newCardiacX >= canvasWidth;
-    var respWrapped = newRespX >= respCanvasWidth;
-    var wrappedCardiacX = newCardiacX % canvasWidth;
-    var wrappedRespX = newRespX % respCanvasWidth;
-    // Track ectopic beats by detecting phase wrap-around (new beat start)
-    var currentBeatPhase = (wrappedCardiacX % beatDurationPixels) / beatDurationPixels;
-    // Detect new beat (phase wrapped around)
-    if (currentBeatPhase < prevBeatPhase) {
-        ectopicBeatNumber++;
-        
-        // Ectopic beat logic (only when enabled)
-        if (ectopicEnabled) {
-            nextEctopicIn--;
-            if (nextEctopicIn <= 0) {
-            ectopicInProgress = true;
-            randomisePVC();
-            scheduleNextEctopic();
-            } else {
-                ectopicInProgress = false;
-            }
-        } else {
-            ectopicInProgress = false;
-        }
+function animate(ts) {
+    ts = ts || 0;
+    // Real elapsed time, capped so a backgrounded tab resumes smoothly rather than jumping
+    var dt = lastFrame == null ? 16 : Math.min(100, Math.max(0, ts - lastFrame));
+    lastFrame = ts;
+
+    if (!isPaused) {
+        updateTransitions(dt);
+        syncEngine();
+        engine.advance(dt);
+        // QRS tone on every counted beat; falls back to the pleth pulse when ECG leads are off
+        var beats = engine.drainBeats(), pulses = engine.drainPulses();
+        if (states.hr_on ? beats.length : (states.spo2_on && pulses.length)) playHeartbeatBeep();
     }
-    prevBeatPhase = currentBeatPhase;
-    var shockArtifactValue = 0;
-    if (shockActive) { shockArtifactValue = getShockArtifact(currentTime - shockStartTime); }
-    
-    // ECG
-    if (ecgCtx && states.hr_on) {
-        var h = ecgCtx.canvas.height, w = ecgCtx.canvas.width;
-        ecgCtx.clearRect(wrappedCardiacX, 0, 25, h);
-        if (cardiacWrapped) { ecgCtx.clearRect(0, 0, 25, h); lastEcgY = h / 2; }
-        if (!cardiacWrapped) {
-            var numSamples = Math.max(3, Math.ceil(SWEEP_SPEEDS.cardiac * 2));
-            var xStep = SWEEP_SPEEDS.cardiac / numSamples;
-            var prevX = cardiacX, prevY = lastEcgY;
-            for (var i = 1; i <= numSamples; i++) {
-                var sampleX = cardiacX + (xStep * i);
-                var phaseInBeat = ((sampleX % beatDurationPixels) / beatDurationPixels);
-                var ecgValue = getEcgPoint(phaseInBeat, rhythm) + shockArtifactValue;
-                var y = (h / 2) - (ecgValue * (h * 0.035));
-                ecgCtx.beginPath();
-                ecgCtx.strokeStyle = '#30d158';
-                ecgCtx.lineWidth = 2.5;
-                ecgCtx.lineCap = 'round';
-                ecgCtx.moveTo(prevX, prevY);
-                ecgCtx.lineTo(sampleX, y);
-                ecgCtx.stroke();
-                prevX = sampleX; prevY = y;
-            }
-            lastEcgY = prevY;
-        }
-        var oldPhase = (cardiacX % beatDurationPixels) / beatDurationPixels;
-        var newPhase = (wrappedCardiacX % beatDurationPixels) / beatDurationPixels;
-        if ((oldPhase > 0.5 && newPhase < 0.5) || (oldPhase < 0.32 && newPhase >= 0.32)) {
-            if (currentTime - lastBeepTime > (60000 / hrRate) * 0.7) {
-                playHeartbeatBeep();
-                lastBeepTime = currentTime;
-            }
-        }
+
+    channels.ecg.draw(states.hr_on);
+    channels.pleth.draw(states.spo2_on);
+    channels.abp.draw(states.abp_on);
+    channels.co2.draw(states.etco2_on);
+    channels.resp.draw(states.resp_on);
+
+    // Numbers refresh a few times a second, like a real monitor
+    if (ts - lastNumbers > 250) {
+        lastNumbers = ts;
+        meas = engine.measured();
+        updateDisplayedValues();
     }
-    
-    // PLETH
-    if (spo2Ctx && states.spo2_on) {
-        var h = spo2Ctx.canvas.height, w = spo2Ctx.canvas.width;
-        spo2Ctx.clearRect(wrappedCardiacX, 0, 25, h);
-        if (cardiacWrapped) { spo2Ctx.clearRect(0, 0, 25, h); lastSpo2Y = h * 0.7; }
-        if (!cardiacWrapped) {
-            var numSamples = Math.max(3, Math.ceil(SWEEP_SPEEDS.cardiac * 2));
-            var xStep = SWEEP_SPEEDS.cardiac / numSamples;
-            var prevX = cardiacX, prevY = lastSpo2Y;
-            for (var i = 1; i <= numSamples; i++) {
-                var sampleX = cardiacX + (xStep * i);
-                var phaseInBeat = ((sampleX % beatDurationPixels) / beatDurationPixels);
-                var respPhaseForPleth = ((sampleX % breathDurationPixels) / breathDurationPixels);
-                var plethValue = getPlethPoint(phaseInBeat, respPhaseForPleth, artifact) + shockArtifactValue * 0.5;
-                var y = (h * 0.7) + (plethValue * (h * 0.05));
-                spo2Ctx.beginPath();
-                spo2Ctx.strokeStyle = plethColorBlue ? '#64d2ff' : '#ffd60a';
-                spo2Ctx.lineWidth = 2.5;
-                spo2Ctx.lineCap = 'round';
-                spo2Ctx.moveTo(prevX, prevY);
-                spo2Ctx.lineTo(sampleX, y);
-                spo2Ctx.stroke();
-                prevX = sampleX; prevY = y;
-            }
-            lastSpo2Y = prevY;
-        }
-    }
-    
-    // ABP
-    if (abpCtx && states.abp_on) {
-        var h = abpCtx.canvas.height, w = abpCtx.canvas.width;
-        abpCtx.clearRect(wrappedCardiacX, 0, 25, h);
-        if (cardiacWrapped) { abpCtx.clearRect(0, 0, 25, h); lastAbpY = h * 0.5; }
-        if (!cardiacWrapped) {
-            var numSamples = Math.max(3, Math.ceil(SWEEP_SPEEDS.cardiac * 2));
-            var xStep = SWEEP_SPEEDS.cardiac / numSamples;
-            var scale = Math.max(0.3, Math.min(1.5, (current.abp_sys - current.abp_dia) / 50));
-            var prevX = cardiacX, prevY = lastAbpY;
-            for (var i = 1; i <= numSamples; i++) {
-                var sampleX = cardiacX + (xStep * i);
-                var phaseInBeat = ((sampleX % beatDurationPixels) / beatDurationPixels);
-                var abpValue = getAbpPoint(phaseInBeat, current.abp_sys, current.abp_dia) + shockArtifactValue * 0.3;
-                var y = (h * 0.5) - (abpValue * (h * 0.35) * scale);
-                abpCtx.beginPath();
-                abpCtx.strokeStyle = '#ff453a';
-                abpCtx.lineWidth = 2.5;
-                abpCtx.lineCap = 'round';
-                abpCtx.moveTo(prevX, prevY);
-                abpCtx.lineTo(sampleX, y);
-                abpCtx.stroke();
-                prevX = sampleX; prevY = y;
-            }
-            lastAbpY = prevY;
-        }
-    }
-    
-    cardiacX = wrappedCardiacX;
-    
-    // RESP
-    if (respCtx && states.resp_on) {
-        var h = respCtx.canvas.height, w = respCtx.canvas.width;
-        respCtx.clearRect(wrappedRespX, 0, 25, h);
-        if (respWrapped) { respCtx.clearRect(0, 0, 25, h); lastRespY = h * 0.5; }
-        if (!respWrapped) {
-            var phaseInBreath = (respX % breathDurationPixels) / breathDurationPixels;
-            var y = (h * 0.5) + (getRespPoint(phaseInBreath, current.resp) * (h * 0.35));
-            respCtx.beginPath();
-            respCtx.strokeStyle = '#8e8e93';
-            respCtx.lineWidth = 2.5;
-            respCtx.lineCap = 'round';
-            respCtx.moveTo(respX, lastRespY);
-            respCtx.lineTo(newRespX, y);
-            respCtx.stroke();
-            lastRespY = y;
-        }
-    }
-    
-    // EtCO2
-    if (etco2Ctx && states.etco2_on) {
-        var h = etco2Ctx.canvas.height, w = etco2Ctx.canvas.width;
-        var baseline = h * 0.85;
-        etco2Ctx.clearRect(wrappedRespX, 0, 25, h);
-        if (respWrapped) { etco2Ctx.clearRect(0, 0, 25, h); lastEtco2Y = baseline; }
-        if (!respWrapped) {
-            var phaseInBreath = (respX % breathDurationPixels) / breathDurationPixels;
-            var displayScale = h * 0.6;
-            if (current.etco2 > 50) displayScale = displayScale * (50 / current.etco2);
-            var y = baseline - (getEtco2Point(phaseInBreath, current.etco2) * displayScale);
-            etco2Ctx.fillStyle = 'rgba(142, 142, 147, 0.25)';
-            etco2Ctx.beginPath();
-            etco2Ctx.moveTo(respX, baseline);
-            etco2Ctx.lineTo(respX, lastEtco2Y);
-            etco2Ctx.lineTo(newRespX, y);
-            etco2Ctx.lineTo(newRespX, baseline);
-            etco2Ctx.closePath();
-            etco2Ctx.fill();
-            etco2Ctx.beginPath();
-            etco2Ctx.strokeStyle = '#8e8e93';
-            etco2Ctx.lineWidth = 2.5;
-            etco2Ctx.moveTo(respX, lastEtco2Y);
-            etco2Ctx.lineTo(newRespX, y);
-            etco2Ctx.stroke();
-            lastEtco2Y = y;
-        }
-    }
-    
-    respX = wrappedRespX;
-    
+
     var anyAlarm = false;
     for (var k in alarmState) { if (alarmState[k]) anyAlarm = true; }
     var priority = getAlarmPriority();
     var repeatInterval = (priority === 'high') ? 3000 : 5000;
-    if (isPoweredOn && anyAlarm && !alarmsSilenced && alarmVolume > 0 && currentTime - lastAlarmTime > repeatInterval) {
+    if (isPoweredOn && !isPaused && anyAlarm && !alarmsSilenced && alarmVolume > 0 && ts - lastAlarmTime > repeatInterval) {
         playAlarmTone();
-        lastAlarmTime = currentTime;
+        lastAlarmTime = ts;
     }
-    
-    if (states.abp_on) {
-        document.getElementById('abp_map').innerText = '(' + Math.round(current.abp_dia + (current.abp_sys - current.abp_dia) / 3) + ')';
-    }
-    
-    document.getElementById('block_spo2').style.borderLeftWidth = (states.spo2_on && current.spo2 < 90) ? '6px' : '4px';
-    
+
+    document.getElementById('block_spo2').style.borderLeftWidth = (states.spo2_on && meas.plethValid && current.spo2 < 90) ? '6px' : '4px';
+
     requestAnimationFrame(animate);
 }
 
@@ -1556,6 +1036,7 @@ function triggerNIBP() {
     nibpCycling = true;
     document.getElementById('btn_nibp').classList.add('active');
     document.getElementById('btn_nibp').classList.remove('has-pending');
+    document.getElementById('nibp_msg').innerText = '';
     var indicator = document.createElement('div');
     indicator.className = 'nibp-cycling';
     indicator.id = 'nibp_indicator';
@@ -1568,10 +1049,16 @@ function triggerNIBP() {
         nibpCycling = false;
         document.getElementById('btn_nibp').classList.remove('active');
         indicator.remove();
+        pendingNIBP.hasPending = false;
+        // An oscillometric cuff needs arterial pulsation: no perfusing rhythm (or CPR) = failed measurement
+        if (!meas.perfusing || isCPRActive) {
+            displayedNIBP.hasReading = false;
+            document.getElementById('nibp_msg').innerText = 'NBP FAILED';
+            return;
+        }
         displayedNIBP.sys = Math.round(pendingNIBP.sys);
         displayedNIBP.dia = Math.round(pendingNIBP.dia);
         displayedNIBP.hasReading = true;
-        pendingNIBP.hasPending = false;
     }, 8000);
 }
 
@@ -1732,7 +1219,7 @@ window.onload = function() {
     updateClock();
     updateLimitDisplays();
     updateDisplayedValues();
-    animate();
+    requestAnimationFrame(animate);
     setTimeout(function() { document.getElementById('pleth_color_hint').style.opacity = '0'; }, 5000);
 };
 </script>
