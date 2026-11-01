@@ -7,7 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        :root { --bg-color: #000; --ecg-color: #30d158; --spo2-color: #64d2ff; --spo2-color-alt: #ffd60a; --resp-color: #8e8e93; --abp-color: #ff453a; --etco2-color: #8e8e93; --temp-color: #bf5af2; --header-bg: #1a1a1a; --header-h: 40px; --footer-h: 70px; --btn-bg: linear-gradient(180deg, #333 0%, #1a1a1a 100%); --alarm-red: #ff3b30; --alarm-yellow: #ffd60a; }
+        :root { --bg-color: #000; --ecg-color: #30d158; --spo2-color: #64d2ff; --spo2-color-alt: #ffd60a; --resp-color: #8e8e93; --abp-color: #ff453a; --etco2-color: #8e8e93; --temp-color: #bf5af2; --header-bg: #1a1a1a; --header-h: 40px; --footer-h: 70px; --btn-bg: linear-gradient(180deg, #333 0%, #1a1a1a 100%); --alarm-red: #ff3b30; --alarm-yellow: #ffd60a; --grey: #8e8e93; --m-green: rgba(48, 209, 88, 0.2); }
         body, html { background: var(--bg-color); color: white; font-family: 'Segoe UI', 'Roboto', sans-serif; height: 100vh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; user-select: none; }
         .monitor-header { height: var(--header-h); background: var(--header-bg); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; font-size: 14px; font-weight: 700; border-bottom: 1px solid #333; flex-shrink: 0; }
         .alarm-indicator { width: 100px; height: 30px; border-radius: 4px; background: #1a1a1a; border: 2px solid #333; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; transition: all 0.3s; }
@@ -340,7 +340,8 @@ function updateTransitions() {
 }
 
 // ==================== ALARM STATE ====================
-var alarmState = { hr: false, spo2: false, resp: false, nibp: false, temp: false, etco2: false };
+var alarmState = { hr: false, spo2: false, resp: false, nibp: false, abp: false, temp: false, etco2: false, ecg: false };
+var LETHAL_RHYTHMS = ['vf', 'vt', 'asystole'];
 var alarmsSilenced = false;
 var alarmSilenceTimer = null;
 
@@ -361,6 +362,13 @@ function togglePlethColor() {
 // ==================== VITAL SETTINGS OVERLAY ====================
 var nibpCycleInterval = null;
 var nibpCycleTime = 0; // 0 = off
+
+function limitRow(label, key, value, step, color) {
+    return '<div class="vital-modal-row"><span class="vital-modal-label">' + label + '</span><div class="vital-modal-value">' +
+        '<button class="vital-modal-btn" onclick="adjustLimit(\'' + key + '\', -' + step + ')">−</button>' +
+        '<span class="vital-modal-num" id="limit_' + key + '" style="color: ' + color + ';">' + value + '</span>' +
+        '<button class="vital-modal-btn" onclick="adjustLimit(\'' + key + '\', ' + step + ')">+</button></div></div>';
+}
 
 function openVitalSettings(type) {
     var overlay = document.getElementById('vital_overlay');
@@ -393,12 +401,16 @@ function openVitalSettings(type) {
         title.innerHTML = '<span style="color: var(--resp-color);">NIBP Settings</span>';
         html = '<div class="vital-modal-row" style="flex-direction: column; align-items: stretch; gap: 10px;"><span class="vital-modal-label">Auto Cycle Interval</span>' +
             '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">' +
-            '<button class="cycle-btn ' + (nibpCycleTime === 0 ? 'active' : '') + '" onclick="setNibpCycle(0)">OFF</button>' +
-            '<button class="cycle-btn ' + (nibpCycleTime === 30 ? 'active' : '') + '" onclick="setNibpCycle(30)">30s</button>' +
-            '<button class="cycle-btn ' + (nibpCycleTime === 60 ? 'active' : '') + '" onclick="setNibpCycle(60)">1m</button>' +
-            '<button class="cycle-btn ' + (nibpCycleTime === 120 ? 'active' : '') + '" onclick="setNibpCycle(120)">2m</button>' +
-            '<button class="cycle-btn ' + (nibpCycleTime === 180 ? 'active' : '') + '" onclick="setNibpCycle(180)">3m</button>' +
-            '<button class="cycle-btn ' + (nibpCycleTime === 300 ? 'active' : '') + '" onclick="setNibpCycle(300)">5m</button></div></div>';
+            '<button class="cycle-btn ' + (nibpCycleTime === 0 ? 'active' : '') + '" onclick="setNibpCycle(0, this)">OFF</button>' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 30 ? 'active' : '') + '" onclick="setNibpCycle(30, this)">30s</button>' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 60 ? 'active' : '') + '" onclick="setNibpCycle(60, this)">1m</button>' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 120 ? 'active' : '') + '" onclick="setNibpCycle(120, this)">2m</button>' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 180 ? 'active' : '') + '" onclick="setNibpCycle(180, this)">3m</button>' +
+            '<button class="cycle-btn ' + (nibpCycleTime === 300 ? 'active' : '') + '" onclick="setNibpCycle(300, this)">5m</button></div></div>' +
+            limitRow('NIBP Sys High', 'nibp_sys_high', limits.nibp_sys_high, 5, 'var(--resp-color)') +
+            limitRow('NIBP Sys Low', 'nibp_sys_low', limits.nibp_sys_low, 5, 'var(--resp-color)') +
+            limitRow('NIBP Dia High', 'nibp_dia_high', limits.nibp_dia_high, 5, 'var(--resp-color)') +
+            limitRow('NIBP Dia Low', 'nibp_dia_low', limits.nibp_dia_low, 5, 'var(--resp-color)');
     } else if (type === 'abp') {
         title.innerHTML = '<span style="color: var(--abp-color);">ABP Alarm Limits</span>';
         html = '<div class="vital-modal-row"><span class="vital-modal-label">Systolic High</span><div class="vital-modal-value">' +
@@ -461,6 +473,10 @@ function adjustLimit(key, delta) {
     else if (key === 'abp_sys_high') { limits.abp_sys_high = Math.max(limits.abp_sys_low + 20, Math.min(250, limits.abp_sys_high + delta)); document.getElementById('limit_abp_sys_high').innerText = limits.abp_sys_high; }
     else if (key === 'abp_sys_low') { limits.abp_sys_low = Math.max(40, Math.min(limits.abp_sys_high - 20, limits.abp_sys_low + delta)); document.getElementById('limit_abp_sys_low').innerText = limits.abp_sys_low; }
     else if (key === 'etco2_high') { limits.etco2_high = Math.max(limits.etco2_low + 5, Math.min(80, limits.etco2_high + delta)); document.getElementById('limit_etco2_high').innerText = limits.etco2_high; }
+    else if (key === 'nibp_sys_high') { limits.nibp_sys_high = Math.max(limits.nibp_sys_low + 10, Math.min(250, limits.nibp_sys_high + delta)); document.getElementById('limit_nibp_sys_high').innerText = limits.nibp_sys_high; }
+    else if (key === 'nibp_sys_low') { limits.nibp_sys_low = Math.max(40, Math.min(limits.nibp_sys_high - 10, limits.nibp_sys_low + delta)); document.getElementById('limit_nibp_sys_low').innerText = limits.nibp_sys_low; }
+    else if (key === 'nibp_dia_high') { limits.nibp_dia_high = Math.max(limits.nibp_dia_low + 10, Math.min(150, limits.nibp_dia_high + delta)); document.getElementById('limit_nibp_dia_high').innerText = limits.nibp_dia_high; }
+    else if (key === 'nibp_dia_low') { limits.nibp_dia_low = Math.max(20, Math.min(limits.nibp_dia_high - 10, limits.nibp_dia_low + delta)); document.getElementById('limit_nibp_dia_low').innerText = limits.nibp_dia_low; }
     else if (key === 'etco2_low') { limits.etco2_low = Math.max(10, Math.min(limits.etco2_high - 5, limits.etco2_low + delta)); document.getElementById('limit_etco2_low').innerText = limits.etco2_low; }
     updateLimitDisplays();
 }
@@ -471,6 +487,9 @@ function updateLimitDisplays() {
     document.getElementById('spo2_limits').innerHTML = '100<br>' + l.spo2_low;
     document.getElementById('resp_limits').innerHTML = l.resp_high + '<br>' + l.resp_low;
     document.getElementById('temp_limits').innerHTML = l.temp_high.toFixed(1) + '<br>' + l.temp_low.toFixed(1);
+    document.getElementById('abp_limits').innerHTML = l.abp_sys_high + '<br>' + l.abp_sys_low;
+    document.getElementById('etco2_limits').innerHTML = l.etco2_high + '<br>' + l.etco2_low;
+    document.getElementById('nibp_limits').innerHTML = l.nibp_sys_high + '/' + l.nibp_dia_high + '<br>' + l.nibp_sys_low + '/' + l.nibp_dia_low;
 }
 
 function setPlethColorFromModal(isBlue) {
@@ -484,7 +503,7 @@ function setPlethColorFromModal(isBlue) {
     document.getElementById('color_yellow').classList.toggle('active', !isBlue);
 }
 
-function setNibpCycle(seconds) {
+function setNibpCycle(seconds, btnEl) {
     nibpCycleTime = seconds;
     if (nibpCycleInterval) { clearInterval(nibpCycleInterval); nibpCycleInterval = null; }
     if (seconds > 0) {
@@ -493,7 +512,7 @@ function setNibpCycle(seconds) {
         }, seconds * 1000);
     }
     document.querySelectorAll('.cycle-btn').forEach(function(btn) { btn.classList.remove('active'); });
-    event.target.classList.add('active');
+    if (btnEl) btnEl.classList.add('active');
 }
 // ==================== AUDIO ====================
 var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -502,7 +521,7 @@ var alarmVolume = 0.5;
 var activeVolumeBar = null;
 
 function playHeartbeatBeep() {
-    if (!states.hr_on || current.hr <= 0 || qrsVolume === 0 || isPaused) return;
+    if (!isPoweredOn || !states.hr_on || current.hr <= 0 || qrsVolume === 0 || isPaused) return;
     var osc = audioCtx.createOscillator();
     var gain = audioCtx.createGain();
     var clampedSpo2 = Math.max(40, Math.min(100, current.spo2));
@@ -522,7 +541,7 @@ function getAlarmPriority() {
     if (states.hr_on && current.hr === 0) return 'high';                          // asystole
     if (states.spo2_on && current.spo2 < 80) return 'high';                      // critical desat
     if (states.abp_on && current.abp_sys < 60) return 'high';                    // severe hypotension
-    if (rhythm === 'vf' || rhythm === 'vt' || rhythm === 'asystole') return 'high'; // lethal rhythms
+    if (states.hr_on && LETHAL_RHYTHMS.indexOf(rhythm) >= 0) return 'high';      // lethal rhythms
 
     // MEDIUM: out of range
     for (var k in alarmState) { if (alarmState[k]) return 'medium'; }
@@ -619,53 +638,49 @@ socket.on('disconnect', function() {
     document.getElementById('connection-status').style.color = 'var(--alarm-red)';
 });
 
+// Parse a numeric field; 0 is a real value (asystole, arrest presets), only missing/invalid falls back
+function num(v, fallback) { var n = parseFloat(v); return isNaN(n) ? fallback : n; }
+
 socket.on('update_monitor', function(data) {
-    console.log('GOT MESSAGE:', data.type);
     if (data.type === 'vitals_adv') {
-        target.hr = parseFloat(data.hr) || target.hr;
-        target.spo2 = parseFloat(data.spo2) || target.spo2;
-        target.resp = parseFloat(data.resp) || target.resp;
-        target.etco2 = parseFloat(data.etco2) || target.etco2;
-        target.abp_sys = parseFloat(data.abp_sys) || target.abp_sys;
-        target.abp_dia = parseFloat(data.abp_dia) || target.abp_dia;
-        target.temp = parseFloat(data.temp) || target.temp;
-        if (data.sys && data.dia) {
-            pendingNIBP.sys = parseFloat(data.sys);
-            pendingNIBP.dia = parseFloat(data.dia);
-            if (states.nibp_on && !nibpCycling) {
+        // Only an explicit reset from the controller returns the monitor to the power screen.
+        // (Previously turning every parameter off also did this, which killed the monitor mid-scenario.)
+        if (data.is_reset) { resetMonitor(); return; }
+        target.hr = num(data.hr, target.hr);
+        target.spo2 = num(data.spo2, target.spo2);
+        target.resp = num(data.resp, target.resp);
+        target.etco2 = num(data.etco2, target.etco2);
+        target.abp_sys = num(data.abp_sys, target.abp_sys);
+        target.abp_dia = num(data.abp_dia, target.abp_dia);
+        target.temp = num(data.temp, target.temp);
+        if (data.sys != null && data.dia != null) {
+            var newSys = num(data.sys, pendingNIBP.sys), newDia = num(data.dia, pendingNIBP.dia);
+            var changed = newSys !== pendingNIBP.sys || newDia !== pendingNIBP.dia;
+            pendingNIBP.sys = newSys;
+            pendingNIBP.dia = newDia;
+            if (data.nibp_on && !nibpCycling && (changed || !displayedNIBP.hasReading)) {
                 pendingNIBP.hasPending = true;
                 document.getElementById('btn_nibp').classList.add('has-pending');
             }
-        // If ALL toggles are off, treat as a full reset — return to power screen
-        if (!data.hr_on && !data.spo2_on && !data.resp_on && 
-            !data.etco2_on && !data.nibp_on && !data.abp_on && !data.temp_on) {
-            resetMonitor();
         }
-        }
-        states.hr_on = data.hr_on; states.spo2_on = data.spo2_on; states.resp_on = data.resp_on;
-        states.etco2_on = data.etco2_on; states.nibp_on = data.nibp_on; states.abp_on = data.abp_on; states.temp_on = data.temp_on;
+        states.hr_on = !!data.hr_on; states.spo2_on = !!data.spo2_on; states.resp_on = !!data.resp_on;
+        states.etco2_on = !!data.etco2_on; states.nibp_on = !!data.nibp_on; states.abp_on = !!data.abp_on; states.temp_on = !!data.temp_on;
         if (data.rhythm) rhythm = data.rhythm;
         if (data.artifact) artifact = data.artifact;
         if (typeof data.ectopic !== 'undefined') {
-            ectopicEnabled = data.ectopic;
-            if (data.ectopic_freq) ectopicFrequency = data.ectopic_freq;
+            ectopicEnabled = !!data.ectopic;
+            // Accept both spellings — the controller historically sent 'ectopicFrequency' on some paths
+            var freq = data.ectopic_freq || data.ectopicFrequency;
+            if (freq) ectopicFrequency = freq;
             if (ectopicEnabled && nextEctopicIn === 0) scheduleNextEctopic();
         }
         handleSpecialRow('abp', states.abp_on);
         handleSpecialRow('etco2', states.etco2_on);
-        // If all toggles are off (reset signal from controller), reset monitor
-        if (data.is_reset || (!data.hr_on && !data.spo2_on && !data.resp_on && 
-            !data.etco2_on && !data.nibp_on && !data.abp_on && !data.temp_on)) {
-            resetMonitor();
-        }
-        if (data.is_reset) {
-            resetMonitor();
-        }
     } else if (data.type === 'rhythm') {
         rhythm = data.rhythm;
     } else if (data.type === 'nibp_reading') {
-        pendingNIBP.sys = parseFloat(data.sys) || pendingNIBP.sys;
-        pendingNIBP.dia = parseFloat(data.dia) || pendingNIBP.dia;
+        pendingNIBP.sys = num(data.sys, pendingNIBP.sys);
+        pendingNIBP.dia = num(data.dia, pendingNIBP.dia);
         pendingNIBP.hasPending = true;
         states.nibp_on = data.nibp_on;
         document.getElementById('btn_nibp').classList.add('has-pending');
@@ -688,6 +703,10 @@ socket.on('update_monitor', function(data) {
         window.location.reload();
     }
 });
+
+// Controller OFF button — return to the power screen but keep the scenario,
+// so powering back on resumes where the instructor left it
+socket.on('system_shutdown_trigger', function() { showPowerScreen(); });
 
 function triggerShock() {
     shockActive = true;
@@ -721,19 +740,28 @@ function resetMonitor() {
     clearAllCanvases();
     setTimeout(clearAllCanvases, 50);
     setTimeout(clearAllCanvases, 100);
-    // Return to power screen
-    if (typeof isPoweredOn !== 'undefined') {
-        isPoweredOn = false;
-        document.getElementById('power_overlay').classList.remove('hidden');
-    }
+    showPowerScreen();
     // Release the drawing block after 500ms — by then states are
     // guaranteed to be applied and no stale frames can sneak through
     setTimeout(function() {
         clearAllCanvases();
         resetPending = false;
     }, 500);
-    document.getElementById('power_overlay').classList.remove('hidden');
+}
+
+function showPowerScreen() {
     isPoweredOn = false;
+    if (nibpCycleInterval) { clearInterval(nibpCycleInterval); nibpCycleInterval = null; nibpCycleTime = 0; }
+    // Put the power-on screen back to its initial look so it can be pressed again
+    document.getElementById('power_btn').classList.remove('active');
+    var label = document.getElementById('power_label');
+    label.classList.remove('active'); label.innerText = 'PRESS TO START';
+    var text = document.getElementById('startup_text');
+    text.classList.remove('visible'); text.innerText = 'INITIALIZING SYSTEM...';
+    document.getElementById('startup_progress').classList.remove('visible');
+    document.getElementById('startup_bar').style.width = '0%';
+    document.getElementById('power_overlay').classList.remove('hidden');
+    releaseWakeLock();
 }
 
 function clearAllCanvases() {
@@ -823,15 +851,26 @@ function checkAlarms() {
     alarmState.spo2 = states.spo2_on && spo2 < limits.spo2_low;
     alarmState.resp = states.resp_on && (resp > limits.resp_high || resp < limits.resp_low);
     alarmState.temp = states.temp_on && (temp > limits.temp_high || temp < limits.temp_low);
+    var abpSys = Math.round(current.abp_sys);
+    alarmState.abp = states.abp_on && (abpSys > limits.abp_sys_high || abpSys < limits.abp_sys_low);
+    var etco2 = Math.round(current.etco2);
+    alarmState.etco2 = states.etco2_on && (etco2 > limits.etco2_high || etco2 < limits.etco2_low);
+    alarmState.nibp = states.nibp_on && displayedNIBP.hasReading &&
+        (displayedNIBP.sys > limits.nibp_sys_high || displayedNIBP.sys < limits.nibp_sys_low ||
+         displayedNIBP.dia > limits.nibp_dia_high || displayedNIBP.dia < limits.nibp_dia_low);
+    alarmState.ecg = states.hr_on && LETHAL_RHYTHMS.indexOf(rhythm) >= 0;
     var priority = getAlarmPriority();
     var cls = (priority === 'high') ? 'alarm-state' : 'alarm-medium';
-    ['block_hr','block_spo2','block_resp','block_temp'].forEach(function(id) {
+    ['block_hr','block_spo2','block_resp','block_temp','block_abp','block_etco2','block_nibp'].forEach(function(id) {
         document.getElementById(id).classList.remove('alarm-state', 'alarm-medium');
     });
-    if (alarmState.hr)   document.getElementById('block_hr').classList.add(cls);
+    if (alarmState.hr || alarmState.ecg) document.getElementById('block_hr').classList.add(cls);
     if (alarmState.spo2) document.getElementById('block_spo2').classList.add(cls);
     if (alarmState.resp) document.getElementById('block_resp').classList.add(cls);
     if (alarmState.temp) document.getElementById('block_temp').classList.add(cls);
+    if (alarmState.abp)  document.getElementById('block_abp').classList.add(cls);
+    if (alarmState.etco2) document.getElementById('block_etco2').classList.add(cls);
+    if (alarmState.nibp) document.getElementById('block_nibp').classList.add(cls);
     for (var k in alarmState) { if (alarmState[k]) anyAlarm = true; }
     var indicator = document.getElementById('alarm_status');
     if (alarmsSilenced) {
@@ -1445,7 +1484,6 @@ function animate(currentTime) {
             etco2Ctx.stroke();
             lastEtco2Y = y;
         }
-        document.getElementById('etco2_limits').innerHTML = Math.max(50, Math.ceil(current.etco2 / 10) * 10 + 10) + '<br>0';
     }
     
     respX = wrappedRespX;
@@ -1454,7 +1492,7 @@ function animate(currentTime) {
     for (var k in alarmState) { if (alarmState[k]) anyAlarm = true; }
     var priority = getAlarmPriority();
     var repeatInterval = (priority === 'high') ? 3000 : 5000;
-    if (anyAlarm && !alarmsSilenced && alarmVolume > 0 && currentTime - lastAlarmTime > repeatInterval) {
+    if (isPoweredOn && anyAlarm && !alarmsSilenced && alarmVolume > 0 && currentTime - lastAlarmTime > repeatInterval) {
         playAlarmTone();
         lastAlarmTime = currentTime;
     }
@@ -1647,6 +1685,7 @@ function startPowerOn() {
                     document.getElementById('power_overlay').classList.add('hidden');
                     isPoweredOn = true;
                     if (audioCtx.state === 'suspended') audioCtx.resume();
+                    requestWakeLock();
                 }, 500);
             }
         }, 50);
@@ -1656,9 +1695,9 @@ function startPowerOn() {
 // ==================== PATIENT TYPE ====================
 var patientType = 'adult';
 var alarmLimits = {
-    adult: { hr_high: 120, hr_low: 60, spo2_low: 92, resp_high: 20, resp_low: 10, temp_high: 38.0, temp_low: 35.0, abp_sys_high: 160, abp_sys_low: 80, etco2_high: 50, etco2_low: 30, label: 'ADULT' },
-    child: { hr_high: 140, hr_low: 70, spo2_low: 94, resp_high: 30, resp_low: 18, temp_high: 38.0, temp_low: 36.0, abp_sys_high: 140, abp_sys_low: 70, etco2_high: 50, etco2_low: 30, label: 'CHILD' },
-    infant: { hr_high: 180, hr_low: 100, spo2_low: 94, resp_high: 50, resp_low: 25, temp_high: 37.5, temp_low: 36.5, abp_sys_high: 120, abp_sys_low: 60, etco2_high: 45, etco2_low: 30, label: 'INFANT' }
+    adult: { hr_high: 120, hr_low: 60, spo2_low: 92, resp_high: 20, resp_low: 10, temp_high: 38.0, temp_low: 35.0, abp_sys_high: 160, abp_sys_low: 80, nibp_sys_high: 140, nibp_sys_low: 90, nibp_dia_high: 90, nibp_dia_low: 60, etco2_high: 50, etco2_low: 30, label: 'ADULT' },
+    child: { hr_high: 140, hr_low: 70, spo2_low: 94, resp_high: 30, resp_low: 18, temp_high: 38.0, temp_low: 36.0, abp_sys_high: 140, abp_sys_low: 70, nibp_sys_high: 130, nibp_sys_low: 80, nibp_dia_high: 85, nibp_dia_low: 45, etco2_high: 50, etco2_low: 30, label: 'CHILD' },
+    infant: { hr_high: 180, hr_low: 100, spo2_low: 94, resp_high: 50, resp_low: 25, temp_high: 37.5, temp_low: 36.5, abp_sys_high: 120, abp_sys_low: 60, nibp_sys_high: 110, nibp_sys_low: 65, nibp_dia_high: 70, nibp_dia_low: 35, etco2_high: 45, etco2_low: 30, label: 'INFANT' }
 };
 
 function openPatientOverlay() { document.getElementById('patient_overlay').classList.add('active'); }
@@ -1669,16 +1708,29 @@ function selectPatientType(type) {
     document.querySelectorAll('.patient-option').forEach(function(el) { el.classList.remove('selected'); });
     document.getElementById('opt_' + type).classList.add('selected');
     document.getElementById('patient_display').innerText = 'PATIENT: ' + l.label + ' ▼';
-    document.getElementById('hr_limits').innerHTML = l.hr_high + '<br>' + l.hr_low;
-    document.getElementById('spo2_limits').innerHTML = '100<br>' + l.spo2_low;
-    document.getElementById('resp_limits').innerHTML = l.resp_high + '<br>' + l.resp_low;
-    document.getElementById('temp_limits').innerHTML = l.temp_high.toFixed(1) + '<br>' + l.temp_low.toFixed(1);
+    updateLimitDisplays();
 }
+
+// ==================== SCREEN WAKE LOCK ====================
+// Keeps phones/tablets from dimming or locking while the monitor is on.
+var wakeLock = null;
+function requestWakeLock() {
+    if (!('wakeLock' in navigator) || !isPoweredOn) return;
+    navigator.wakeLock.request('screen').then(function(lock) { wakeLock = lock; }).catch(function() {});
+}
+function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release().catch(function() {}); wakeLock = null; }
+}
+// The browser drops the lock when the page is hidden; take it again on return
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') requestWakeLock();
+});
 
 // ==================== INIT ====================
 window.onload = function() {
     initCanvases();
     updateClock();
+    updateLimitDisplays();
     updateDisplayedValues();
     animate();
     setTimeout(function() { document.getElementById('pleth_color_hint').style.opacity = '0'; }, 5000);
