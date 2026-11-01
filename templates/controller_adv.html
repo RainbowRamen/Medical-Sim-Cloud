@@ -3,14 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SimControl - Advanced Mode</title>
+    <title>Monitor controller</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="{{ url_for('static', filename='js/sim-engine.js') }}"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet">
     <style>
-        :root { --bg: #000; --card: #1c1c1e; --accent: #0a84ff; --green: #30d158; --yellow: #ffd60a; --red: #ff453a; --purple: #bf5af2; --grey: #8e8e93; --cyan: #64d2ff; --orange: #ff9500; --m-green: rgba(48, 209, 88, 0.2); --m-yellow: rgba(255, 214, 10, 0.2); --m-red: rgba(255, 69, 58, 0.2); --m-purple: rgba(191, 90, 242, 0.2); --m-grey: rgba(142, 142, 147, 0.2); --m-cyan: rgba(100, 210, 255, 0.2); --m-orange: rgba(255, 149, 0, 0.2); --dock-h: 60px; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); color: white; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; user-select: none; -webkit-tap-highlight-color: transparent; }
-        .header { background: rgba(28, 28, 30, 0.8); backdrop-filter: blur(15px); padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; border-bottom: 0.5px solid #333; }
+        :root { --bg: #000; --card: #1c1c1e; --accent: #0a84ff; --green: #30d158; --yellow: #ffd60a; --red: #ff453a; --purple: #bf5af2; --grey: #8e8e93; --cyan: #64d2ff; --orange: #ff9500; --m-green: rgba(48, 209, 88, 0.2); --m-yellow: rgba(255, 214, 10, 0.2); --m-red: rgba(255, 69, 58, 0.2); --m-purple: rgba(191, 90, 242, 0.2); --m-grey: rgba(142, 142, 147, 0.2); --m-cyan: rgba(100, 210, 255, 0.2); --m-orange: rgba(255, 149, 0, 0.2); --dock-h: 60px;
+            --c-hr: #00e676; --c-spo2: #29d3ff; --c-resp: #e9ecef; --c-nibp: #e9ecef; --c-abp: #ff3b3b; --c-co2: #ffe03a; --c-temp: #c3a6ff;
+            --t-hr: rgba(0, 230, 118, 0.16); --t-spo2: rgba(41, 211, 255, 0.16); --t-resp: rgba(233, 236, 239, 0.12); --t-nibp: rgba(233, 236, 239, 0.12);
+            --t-abp: rgba(255, 59, 59, 0.16); --t-co2: rgba(255, 224, 58, 0.16); --t-temp: rgba(195, 166, 255, 0.16);
+            --card: #15181c; --line: #262b31; }
+        body { font-family: 'Barlow', -apple-system, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: white; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .header { background: #15181c; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; border-bottom: 0.5px solid #333; }
         .scroll-area { padding: 8px; overflow-y: auto; flex-grow: 1; gap: 8px; display: grid; padding-bottom: 10px; grid-template-columns: 1fr; }
         .card { min-height: 0; }
         @media (min-width: 768px) { 
@@ -24,30 +31,32 @@
             .scroll-area { grid-template-columns: repeat(4, 1fr); } 
         }
         /* Fill vertical space and let last-row cards stretch */
-        .scroll-area { align-content: start; }
+        /* Phones: cards keep their full height and the list scrolls (they used to be squeezed and overlap) */
+        .scroll-area { align-content: start; grid-auto-rows: max-content; }
         @media (min-height: 600px) and (min-width: 768px) {
-            .scroll-area { overflow-y: hidden; align-content: stretch; }
+            .scroll-area { overflow-y: hidden; align-content: stretch; grid-auto-rows: auto; }
 }
-        .card { background: var(--card); border-radius: 12px; padding: 12px; border: 0.5px solid #333; display: flex; flex-direction: column; }
-        .val-display { font-size: 2rem; font-weight: 800; line-height: 1; cursor: pointer; }
+        .card { background: var(--card); border-radius: 10px; padding: 12px; border: 1px solid var(--line); display: flex; flex-direction: column; }
+        .val-display { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-size: 2.4rem; font-weight: 600; line-height: 1; cursor: pointer; font-variant-numeric: tabular-nums; }
         .val-display:active { opacity: 0.5; }
         .dimmed { opacity: 0.15 !important; filter: grayscale(1); }
         .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .param-title { font-weight: 800; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; }
+        .param-title { font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 6px; }
         .unit { font-size: 0.7rem; color: var(--grey); margin-left: 4px; }
         .control-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-        .fine-btn { background: #2c2c2e; border: 1px solid #444; color: white; width: 38px; height: 38px; border-radius: 10px; font-size: 1.1rem; font-weight: 600; flex-shrink: 0; }
+        .fine-btn { background: #22262c; border: 1px solid var(--line); color: white; width: 44px; height: 44px; border-radius: 10px; font-size: 1.1rem; font-weight: 600; flex-shrink: 0; }
         .fine-btn:active { background: #3a3a3c; }
-        .btn-send { width: 100%; border: none; color: white; padding: 10px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; margin-top: auto; letter-spacing: 1px; }
+        .btn-send { width: 100%; border: none; color: white; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; margin-top: auto; letter-spacing: 0.5px; min-height: 44px; }
         .btn-send:active { filter: brightness(1.5); }
         .btn-send:disabled { opacity: 0.3; }
         .btn-send.live-disabled { background: #333 !important; color: #666 !important; }
-        .btn-hr { background: var(--m-green); color: var(--green); }
-        .btn-spo2 { background: var(--m-yellow); color: var(--yellow); }
-        .btn-resp { background: var(--m-grey); color: var(--grey); }
-        .btn-bp { background: var(--m-red); color: var(--red); }
-        .btn-temp { background: var(--m-purple); color: var(--purple); }
-        .btn-etco2 { background: var(--m-cyan); color: var(--cyan); }
+        .btn-hr { background: var(--t-hr); color: var(--c-hr); }
+        .btn-spo2 { background: var(--t-spo2); color: var(--c-spo2); }
+        .btn-resp { background: var(--t-resp); color: var(--c-resp); }
+        .btn-bp { background: var(--t-nibp); color: var(--c-nibp); }
+        .btn-abp { background: var(--t-abp); color: var(--c-abp); }
+        .btn-temp { background: var(--t-temp); color: var(--c-temp); }
+        .btn-etco2 { background: var(--t-co2); color: var(--c-co2); }
         #header-qr { background: white; padding: 3px; border-radius: 4px; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
         #qr-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
         #qrcode { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
@@ -70,12 +79,13 @@
         input:checked + .slider-toggle:before { transform: translateX(18px); }
         input[type=range] { flex-grow: 1; appearance: none; -webkit-appearance: none; height: 6px; border-radius: 3px; outline: none; }
         input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 22px; height: 22px; background: white; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
-        .s-hr { background: var(--m-green) !important; }
-        .s-spo2 { background: var(--m-yellow) !important; }
-        .s-resp { background: var(--m-grey) !important; }
-        .s-bp { background: var(--m-red) !important; }
-        .s-temp { background: var(--m-purple) !important; }
-        .s-etco2 { background: var(--m-cyan) !important; }
+        .s-hr { background: var(--t-hr) !important; }
+        .s-spo2 { background: var(--t-spo2) !important; }
+        .s-resp { background: var(--t-resp) !important; }
+        .s-bp { background: var(--t-nibp) !important; }
+        .s-temp { background: var(--t-temp) !important; }
+        .s-etco2 { background: var(--t-co2) !important; }
+        input[type=range]::-webkit-slider-thumb { width: 26px; height: 26px; }
         .btn-open-rhythm { background: #2c2c2e; border: 1px solid #444; color: white; width: 100%; padding: 6px 10px; border-radius: 6px; font-weight: 600; font-size: 0.7rem; text-align: left; position: relative; }
         .btn-open-rhythm::after { content: '▶'; position: absolute; right: 10px; color: var(--grey); font-size: 0.7rem; }
         .btn-open-rhythm.has-queued { border-color: var(--yellow); }
@@ -98,11 +108,16 @@
         @keyframes live-pulse { 0%, 100% { box-shadow: 0 0 5px var(--cyan); } 50% { box-shadow: 0 0 15px var(--cyan); } }
 
         /* Bottom Dock */
-        .bottom-dock { height: var(--dock-h); background: #0a0a0a; display: flex; padding: 6px; gap: 4px; border-top: 2px solid #222; flex-shrink: 0; }
-        .dock-btn { flex: 1; background: linear-gradient(180deg, #333 0%, #1a1a1a 100%); border: 1px solid #333; border-radius: 6px; color: #999; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s; min-width: 0; }
+        .bottom-dock { height: var(--dock-h); background: #15181c; display: grid; grid-template-columns: repeat(10, 1fr); padding: 6px; gap: 5px; border-top: 1px solid var(--line); flex-shrink: 0; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+        @media (max-width: 640px) {
+            :root { --dock-h: 124px; }
+            .bottom-dock { grid-template-columns: repeat(5, 1fr); grid-template-rows: 1fr 1fr; }
+            .dock-btn .label { font-size: 0.62rem; }
+        }
+        .dock-btn { background: #22262c; border: 1px solid var(--line); border-radius: 8px; color: #c4cad1; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s; min-width: 0; }
         .dock-btn:active { background: linear-gradient(180deg, #444 0%, #222 100%); transform: scale(0.95); }
         .dock-btn .icon { font-size: 1.1rem; }
-        .dock-btn .label { font-size: 0.5rem; font-weight: 700; margin-top: 2px; text-transform: uppercase; }
+        .dock-btn .label { font-size: 0.58rem; font-weight: 600; margin-top: 3px; }
         .dock-btn.active { background: var(--m-green); border-color: var(--green); color: var(--green); }
         .dock-btn.pause-active { background: var(--m-yellow); border-color: var(--yellow); color: var(--yellow); }
         .dock-btn.cpr-active { background: var(--m-red); border-color: var(--red); color: var(--red); animation: cpr-pulse 0.6s infinite; }
@@ -115,7 +130,7 @@
         .overlay-panel.active { bottom: var(--dock-h); }
         .overlay-title { font-size: 0.8rem; font-weight: 800; color: var(--grey); margin-bottom: 12px; text-align: center; }
         .timer-display { display: flex; align-items: center; justify-content: center; gap: 15px; }
-        .timer-time { font-size: 2.5rem; font-weight: 900; font-family: monospace; color: var(--cyan); }
+        .timer-time { font-size: 2.6rem; font-weight: 600; font-family: 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: var(--cyan); }
         .timer-btn { background: #2c2c2e; border: 1px solid #444; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; }
         .timer-btn:active { background: #444; }
         .timer-btn.running { background: var(--m-green); border-color: var(--green); color: var(--green); }
@@ -139,7 +154,7 @@
         <button class="header-btn" onclick="openMonitor()">MONITOR</button>
     </div>
     <div style="display: flex; flex-direction: column; align-items: center;">
-        <div id="room_code" style="color: var(--accent); font-weight: 900; font-family: monospace; font-size: 0.95rem;">----</div>
+        <div id="room_code" style="color: var(--accent); font-weight: 600; font-family: 'Barlow Condensed', sans-serif; font-size: 1.25rem; letter-spacing: 2px;">----</div>
         <div style="font-size: 0.5rem; display: flex; align-items: center;">
             <span id="status_dot" class="status-dot"></span>
             <span id="status_text" style="color: var(--grey);">OFFLINE</span>
@@ -152,9 +167,9 @@
 
 <div class="scroll-area">
     <!-- HR Card with Rhythm -->
-    <div class="card" id="card_hr" style="border-left: 4px solid var(--green);">
-        <div class="card-header"><div class="param-title" style="color: var(--green);">HR <label class="switch"><input type="checkbox" id="hr_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
-        <div class="val-display" id="hr_val" style="color: var(--green);" onclick="toggleInput('hr_on')">60<span class="unit">BPM</span></div>
+    <div class="card" id="card_hr" style="border-left: 4px solid var(--c-hr);">
+        <div class="card-header"><div class="param-title" style="color: var(--c-hr);">HR <label class="switch"><input type="checkbox" id="hr_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display" id="hr_val" style="color: var(--c-hr);" onclick="toggleInput('hr_on')">60<span class="unit">BPM</span></div>
         <div class="control-row">
             <button class="fine-btn" onclick="adjust('hr_s', -1)">−</button>
             <input type="range" id="hr_s" class="s-hr" min="0" max="220" value="60" oninput="handleChange()">
@@ -194,9 +209,9 @@
     </div>
 
     <!-- SpO2 Card -->
-    <div class="card" id="card_spo2" style="border-left: 4px solid var(--yellow);">
-        <div class="card-header"><div class="param-title" style="color: var(--yellow);">SpO2 <label class="switch"><input type="checkbox" id="spo2_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
-        <div class="val-display" id="spo2_val" style="color: var(--yellow);" onclick="toggleInput('spo2_on')">98<span class="unit">%</span></div>
+    <div class="card" id="card_spo2" style="border-left: 4px solid var(--c-spo2);">
+        <div class="card-header"><div class="param-title" style="color: var(--c-spo2);">SpO2 <label class="switch"><input type="checkbox" id="spo2_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display" id="spo2_val" style="color: var(--c-spo2);" onclick="toggleInput('spo2_on')">98<span class="unit">%</span></div>
         <div class="control-row">
             <button class="fine-btn" onclick="adjust('spo2_s', -1)">−</button>
             <input type="range" id="spo2_s" class="s-spo2" min="50" max="100" value="98" oninput="handleChange()">
@@ -216,9 +231,9 @@
     </div>
 
     <!-- RESP Card -->
-    <div class="card" id="card_resp" style="border-left: 4px solid var(--grey);">
-        <div class="card-header"><div class="param-title" style="color: var(--grey);">RESP <label class="switch"><input type="checkbox" id="resp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
-        <div class="val-display" id="resp_val" style="color: var(--grey);" onclick="toggleInput('resp_on')">16<span class="unit">BRPM</span></div>
+    <div class="card" id="card_resp" style="border-left: 4px solid var(--c-resp);">
+        <div class="card-header"><div class="param-title" style="color: var(--c-resp);">RESP <label class="switch"><input type="checkbox" id="resp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display" id="resp_val" style="color: var(--c-resp);" onclick="toggleInput('resp_on')">16<span class="unit">BRPM</span></div>
         <div class="control-row">
             <button class="fine-btn" onclick="adjust('resp_s', -1)">−</button>
             <input type="range" id="resp_s" class="s-resp" min="0" max="60" value="16" oninput="handleChange()">
@@ -232,10 +247,10 @@
     </div>
 
     <!-- NIBP Card -->
-    <div class="card" id="card_nibp" style="border-left: 4px solid var(--red);">
-        <div class="card-header"><div class="param-title" style="color: var(--red);">NIBP <label class="switch"><input type="checkbox" id="nibp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+    <div class="card" id="card_nibp" style="border-left: 4px solid var(--c-nibp);">
+        <div class="card-header"><div class="param-title" style="color: var(--c-nibp);">NIBP <label class="switch"><input type="checkbox" id="nibp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
         <div class="sync-label" id="bp_sync_label" style="display:none;">🔗 SYNCED WITH ABP</div>
-        <div class="val-display" id="nibp_val" style="color: var(--red);" onclick="toggleInput('nibp_on')">120/80<span class="unit">mmHg</span></div>
+        <div class="val-display" id="nibp_val" style="color: var(--c-nibp);" onclick="toggleInput('nibp_on')">120/80<span class="unit">mmHg</span></div>
         <div style="font-size: 0.55rem; color: var(--grey); margin: 3px 0;">SYS</div>
         <div class="control-row">
             <button class="fine-btn" onclick="adjustBP('sys', -5)">−</button>
@@ -256,9 +271,9 @@
     </div>
 
     <!-- TEMP Card -->
-    <div class="card" id="card_temp" style="border-left: 4px solid var(--purple);">
-        <div class="card-header"><div class="param-title" style="color: var(--purple);">TEMP <label class="switch"><input type="checkbox" id="temp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
-        <div class="val-display" id="temp_val" style="color: var(--purple);" onclick="toggleInput('temp_on')">36.8<span class="unit">°C</span></div>
+    <div class="card" id="card_temp" style="border-left: 4px solid var(--c-temp);">
+        <div class="card-header"><div class="param-title" style="color: var(--c-temp);">TEMP <label class="switch"><input type="checkbox" id="temp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display" id="temp_val" style="color: var(--c-temp);" onclick="toggleInput('temp_on')">36.8<span class="unit">°C</span></div>
         <div class="control-row">
             <button class="fine-btn" onclick="adjust('temp_s', -0.1)">−</button>
             <input type="range" id="temp_s" class="s-temp" min="30" max="42" step="0.1" value="36.8" oninput="handleChange()">
@@ -272,9 +287,9 @@
     </div>
 
     <!-- EtCO2 Card (hidden by default) -->
-    <div id="etco2_card" class="card hidden" style="border-left: 4px solid var(--cyan);">
-        <div class="card-header"><div class="param-title" style="color: var(--cyan);">EtCO2 <label class="switch"><input type="checkbox" id="etco2_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
-        <div class="val-display dimmed" id="etco2_val" style="color: var(--cyan);" onclick="toggleInput('etco2_on')">35<span class="unit">mmHg</span></div>
+    <div id="etco2_card" class="card hidden" style="border-left: 4px solid var(--c-co2);">
+        <div class="card-header"><div class="param-title" style="color: var(--c-co2);">EtCO2 <label class="switch"><input type="checkbox" id="etco2_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display dimmed" id="etco2_val" style="color: var(--c-co2);" onclick="toggleInput('etco2_on')">35<span class="unit">mmHg</span></div>
         <div class="control-row">
             <button class="fine-btn" onclick="adjust('etco2_s', -1)">−</button>
             <input type="range" id="etco2_s" class="s-etco2" min="0" max="100" value="35" oninput="handleChange()">
@@ -292,11 +307,11 @@
     </div>
 
     <!-- ABP Card (hidden by default) -->
-    <div id="abp_card" class="card hidden" style="border-left: 4px solid var(--red);">
-        <div class="card-header"><div class="param-title" style="color: var(--red);">ABP <label class="switch"><input type="checkbox" id="abp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
-        <div class="val-display dimmed" id="abp_val" style="color: var(--red);" onclick="toggleInput('abp_on')">120/80<span class="unit">mmHg</span></div>
+    <div id="abp_card" class="card hidden" style="border-left: 4px solid var(--c-abp);">
+        <div class="card-header"><div class="param-title" style="color: var(--c-abp);">ABP <label class="switch"><input type="checkbox" id="abp_on" onchange="handleChange()"><span class="slider-toggle"></span></label></div></div>
+        <div class="val-display dimmed" id="abp_val" style="color: var(--c-abp);" onclick="toggleInput('abp_on')">120/80<span class="unit">mmHg</span></div>
         <div style="font-size: 0.55rem; color: var(--grey); text-align: center; margin: 5px 0;">Uses same BP values - updates live</div>
-        <button class="btn-send btn-bp" onclick="sendVitals()">UPDATE</button>
+        <button class="btn-send btn-abp" onclick="sendVitals()">UPDATE</button>
     </div>
 </div>
 

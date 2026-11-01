@@ -1,5 +1,60 @@
 # Changelog
 
+## Phase 3 — Visual design
+
+### Advanced monitor: Philips/GE-style layout
+- **Layout:** pure black screen with waves on the left and a numbers column on the right. Each number is drawn in its parameter's colour, in a condensed typeface like real monitor numerals.
+- **Tiles:** each one shows the label, unit and alarm limits, and the value grows to fill the tile on any screen size.
+- **NBP tile:** shows the time of the last reading, plus the auto-cycle interval when one is set.
+- **ABP tile:** shows the mean pressure.
+- **SpO₂ tile:** shows the pulse rate.
+- **Header alarm field** shows real messages with IEC priority marks:
+  - High priority (red, flashing 2 Hz): `*** VFib/VTach`, `*** Asystole`, `*** Desat 76`.
+  - Medium priority (yellow, flashing 0.6 Hz): `** HR 140 > 120`.
+  - Technical messages (cyan): `SpO₂ no pulse`.
+  - When there are several messages, the highest priority wins and the rest are counted (for example `+2 more`).
+  - Visual alarms stay on while the alarm sound is paused, as the standard requires.
+- **Each tile flashes at its own alarm's priority.**
+- **Bottom keys** are plainly named: Pause alarms, Alarm limits, Start NBP, QRS volume, Alarm volume, Menu.
+- **Menu:**
+  - **Display colours:** choose the colour of each waveform and its number. The choice is remembered on that device and can be reset to the defaults.
+  - **Alarm limits:** an overview of every limit; tap a row to change it.
+  - **Patient category.**
+- **Colour in settings:** every parameter's settings panel also has a colour row.
+- **Phone landscape:** the numbers go two-across beside the waves and the header and bottom keys get smaller.
+- **Portrait:** waves on top and numbers below, two-across on phones and three-across on tablets. Bottom keys sit in two rows on phones.
+- **Odd tile count:** the last tile spans the row, so there's no gap.
+
+### Spot Check monitor
+- **Light, ward-style look:** cool white background, dark numerals, and parameter colours deep enough to read in daylight. The glows and the monospace font are gone.
+- **Layout:**
+  - Blood pressure gets the most space.
+  - Landscape: systolic and diastolic as two tall tiles, with SpO₂ and pulse beside them, and temperature and Start BP below.
+  - Portrait: three rows of two.
+- **Alarm colours and flash rates** match the Advanced monitor (IEC). Wording is plain sentence case: "Attach probe", "No cuff", "No pulse", "Measuring", "No reading".
+
+### Controllers
+- **Advanced controller:**
+  - Parameter colours now match the monitor (SpO₂ cyan, EtCO₂ yellow, NIBP white, ABP red).
+  - New typeface and larger touch targets: ± buttons and UPDATE buttons are 44 px.
+- **Fixed on phones:** the Advanced controller's cards were squeezed to fit the screen and overlapped, hiding the UPDATE buttons. They now keep their full height and the list scrolls.
+- **Phone button bar:** on phones the 10-button bar wraps into two rows of 5, so every button is reachable with a thumb.
+- **Spot Check controller:** uses the same palette and typeface as its monitor.
+
+### Landing page
+- **Redesigned:**
+  - A single ECG sweep across the top.
+  - Two plainly described choices: "Advanced monitor" and "Spot check".
+  - A large code field to connect a monitor, with clearer messages when a code is wrong.
+
+### How to test on devices
+1. **Advanced monitor in all three positions:** open it on a phone in landscape, then portrait, then on a tablet. Every number should be readable and nothing should overlap.
+2. **Header alarm field:** choose VF. The header should read `*** VFib/VTach` on red, and the HR tile should flash red.
+3. **Medium alarm:** set HR to 140. Expect a yellow `** HR 140 > 120`.
+4. **Colours:** Menu → Display colours → pick orange for ECG. Both the ECG wave and the HR number should change. Reload the page: the colour should stay.
+5. **Advanced controller on a phone:** scroll through the cards. UPDATE should be visible on each, and the bottom bar shows two rows.
+6. **Spot Check, portrait and landscape:** labels shouldn't overlap the alarm limits.
+
 ## Phase 2 — Sound
 
 ### Why sound sometimes didn't play on phones
