@@ -74,8 +74,24 @@ def create_room(mode='basic'):
         'sys': 120, 'dia': 80, 'bp_conn': False,
         'temp': 36.8,
         'signal_quality': 'normal',
-        'rhythm': 'nsr'
+        'rhythm': 'nsr',
+        'last': {}
     }
+
+# Messages that describe ongoing state. The latest of each is kept per room
+# and replayed to a monitor when it (re)joins, so a phone that locks its
+# screen or reloads picks up where the scenario is instead of going blank.
+# One-off events (shock, nibp trigger) are deliberately not replayed.
+REPLAY_TYPES = ['vitals', 'set_target_bp', 'push_temp',            # Spot Check
+                'vitals_adv', 'pause', 'cpr', 'master_volume']     # Advanced
+
+def remember(room, data):
+    msg_type = data.get('type', '')
+    if msg_type in REPLAY_TYPES:
+        rooms_data[room].setdefault('last', {})[msg_type] = dict(data)
+
+def forget_all(room):
+    rooms_data[room]['last'] = {}
 
 # --- SOCKET LOGIC ---
 
@@ -88,6 +104,14 @@ def on_join(data):
         if room not in rooms_data:
             rooms_data[room] = create_room()
         emit('update_monitor', {'type': 'joined', 'client': client_type}, room=room)
+        # Bring a (re)connecting monitor up to date with the current scenario
+        if client_type == 'monitor':
+            last = rooms_data[room].get('last', {})
+            for msg_type in REPLAY_TYPES:
+                if msg_type in last:
+                    msg = dict(last[msg_type])
+                    msg['replay'] = True
+                    emit('update_monitor', msg, to=request.sid)
 
 @socketio.on('update_vitals')
 def handle_vitals(data):
@@ -137,6 +161,13 @@ def handle_vitals(data):
     elif msg_type == 'system_reset':
         rooms_data[room] = create_room(rooms_data[room].get('mode', 'basic'))
 
+    # Keep the latest state for replay; a reset wipes it so a monitor that
+    # reconnects afterwards doesn't get stale values (or a second reset).
+    if msg_type in ('reset', 'system_reset') or data.get('is_reset'):
+        forget_all(room)
+    else:
+        remember(room, data)
+
     # Forward ALL messages to monitors in the room
     emit('update_monitor', data, room=room)
 
@@ -148,4 +179,6 @@ def handle_shutdown(data):
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=True)
+    # Debug mode (auto-reloader, verbose errors) only when explicitly asked for
+    debug = os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true', 'yes')
+    socketio.run(app, host='0.0.0.0', port=port, debug=debug)

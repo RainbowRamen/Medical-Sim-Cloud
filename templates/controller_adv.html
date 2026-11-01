@@ -419,6 +419,19 @@ var trends = {
 var trendInterval = null;
 var lastSentValues = { hr: 75, spo2: 98, resp: 16, sys: 120, dia: 80, temp: 36.8, etco2: 35 };
 
+// Last value sent to the monitor, falling back to the slider. 0 is a valid value
+// (the old `a || b` pattern silently replaced 0 with the slider position).
+function lastOr(key, sliderId) {
+    var v = lastSentValues[key];
+    return (v === null || v === undefined || isNaN(v)) ? document.getElementById(sliderId).value : v;
+}
+
+// Card element for a vital. The EtCO2 card's id is 'etco2_card' (not 'card_etco2'), which made
+// the trend code, the NORMAL button and RESET throw before they could send anything.
+function cardFor(vital) {
+    return document.getElementById('card_' + vital) || document.getElementById(vital + '_card');
+}
+
 function updateTrendDurationDisplay() {
     var secs = parseInt(document.getElementById('trend_duration').value);
     var mins = Math.floor(secs / 60);
@@ -454,7 +467,7 @@ function applyTrend() {
                     duration: duration
                 };
                 document.getElementById('trend_' + vital).style.display = 'flex';
-                document.getElementById('card_' + vital).classList.add('trend-active');
+                cardFor(vital).classList.add('trend-active');
             }
         }
     });
@@ -543,15 +556,15 @@ function sendTrendUpdate(vital, value) {
     var data = {
         room: room,
         type: 'vitals_adv',
-        hr: vital === 'hr' ? value : (lastSentValues.hr || document.getElementById('hr_s').value),
-        spo2: vital === 'spo2' ? value : (lastSentValues.spo2 || document.getElementById('spo2_s').value),
-        resp: vital === 'resp' ? value : (lastSentValues.resp || document.getElementById('resp_s').value),
-        etco2: vital === 'etco2' ? value : (lastSentValues.etco2 || document.getElementById('etco2_s').value),
-        temp: vital === 'temp' ? value : (lastSentValues.temp || document.getElementById('temp_s').value),
-        sys: lastSentValues.sys || document.getElementById('sys_s').value,
-        dia: lastSentValues.dia || document.getElementById('dia_s').value,
-        abp_sys: lastSentValues.sys || document.getElementById('sys_s').value,
-        abp_dia: lastSentValues.dia || document.getElementById('dia_s').value,
+        hr: vital === 'hr' ? value : lastOr('hr', 'hr_s'),
+        spo2: vital === 'spo2' ? value : lastOr('spo2', 'spo2_s'),
+        resp: vital === 'resp' ? value : lastOr('resp', 'resp_s'),
+        etco2: vital === 'etco2' ? value : lastOr('etco2', 'etco2_s'),
+        temp: vital === 'temp' ? value : lastOr('temp', 'temp_s'),
+        sys: lastOr('sys', 'sys_s'),
+        dia: lastOr('dia', 'dia_s'),
+        abp_sys: lastOr('sys', 'sys_s'),
+        abp_dia: lastOr('dia', 'dia_s'),
         hr_on: document.getElementById('hr_on').checked,
         spo2_on: document.getElementById('spo2_on').checked,
         resp_on: document.getElementById('resp_on').checked,
@@ -561,7 +574,7 @@ function sendTrendUpdate(vital, value) {
         temp_on: document.getElementById('temp_on').checked,
         rhythm: currentRhythm,
         artifact: currentArtifact,
-        ectopic: ectopicEnabled, ectopicFrequency: ectopicFrequency
+        ectopic: ectopicEnabled, ectopic_freq: ectopicFrequency
     };
     socket.emit('update_vitals', data);
 }
@@ -570,11 +583,11 @@ function sendBPTrendUpdate(sys, dia) {
     var data = {
         room: room,
         type: 'vitals_adv',
-        hr: lastSentValues.hr || document.getElementById('hr_s').value,
-        spo2: lastSentValues.spo2 || document.getElementById('spo2_s').value,
-        resp: lastSentValues.resp || document.getElementById('resp_s').value,
-        etco2: lastSentValues.etco2 || document.getElementById('etco2_s').value,
-        temp: lastSentValues.temp || document.getElementById('temp_s').value,
+        hr: lastOr('hr', 'hr_s'),
+        spo2: lastOr('spo2', 'spo2_s'),
+        resp: lastOr('resp', 'resp_s'),
+        etco2: lastOr('etco2', 'etco2_s'),
+        temp: lastOr('temp', 'temp_s'),
         sys: sys,
         dia: dia,
         abp_sys: sys,
@@ -597,7 +610,7 @@ function completeTrend(vital) {
     trends[vital].active = false;
     lastSentValues[vital] = trends[vital].endValue;
     document.getElementById('trend_' + vital).style.display = 'none';
-    document.getElementById('card_' + vital).classList.remove('trend-active');
+    cardFor(vital).classList.remove('trend-active');
     // Send final value without resetting lastSentValues from sliders
     sendTrendUpdate(vital, trends[vital].endValue);
 }
@@ -611,7 +624,7 @@ function cancelTrend(vital) {
     } else {
         trends[vital].active = false;
         document.getElementById('trend_' + vital).style.display = 'none';
-        document.getElementById('card_' + vital).classList.remove('trend-active');
+        cardFor(vital).classList.remove('trend-active');
     }
 }
 
@@ -640,7 +653,7 @@ function sendFullVitals() {
         nibp_on: document.getElementById('nibp_on').checked, abp_on: document.getElementById('abp_on').checked,
         temp: document.getElementById('temp_s').value, temp_on: document.getElementById('temp_on').checked,
         rhythm: rhythmToSend, artifact: currentArtifact,
-        ectopic: ectopicEnabled, ectopicFrequency: ectopicFrequency
+        ectopic: ectopicEnabled, ectopic_freq: ectopicFrequency
     });
     updateQueuedRhythmUI();
 }
@@ -950,7 +963,7 @@ function resetSim() {
         ['hr', 'spo2', 'resp', 'temp', 'etco2'].forEach(function(v) { 
             trends[v].active = false;
             document.getElementById('trend_' + v).style.display = 'none';
-            document.getElementById('card_' + v).classList.remove('trend-active');
+            cardFor(v).classList.remove('trend-active');
         });
         trends.nibp_sys.active = false;
         trends.nibp_dia.active = false;

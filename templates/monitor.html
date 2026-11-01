@@ -762,6 +762,8 @@ function startBoot() {
                 updateDisplay();
                 runAnimationLoop();
                 startDriftTimer();
+                isPoweredOn = true;
+                requestWakeLock();
             }, 500);
         }, 3200);
     }, 300);
@@ -882,6 +884,9 @@ socket.on('connect_error', function() {
     document.getElementById('sys_status_text').style.color = 'var(--red)';
 });
 
+// Controller OFF button — back to the standby screen (the scenario is replayed on reconnect)
+socket.on('system_shutdown_trigger', function() { location.reload(); });
+
 socket.on('update_monitor', function(data) {
     if (data.type === 'vitals') {
         targetHR = data.hr;
@@ -966,6 +971,18 @@ function runBP() {
         }
     }, 300);
 }
+
+// ==================== SCREEN WAKE LOCK ====================
+// Keeps phones/tablets from dimming or locking while the monitor is on.
+var isPoweredOn = false;
+var wakeLock = null;
+function requestWakeLock() {
+    if (!('wakeLock' in navigator) || !isPoweredOn) return;
+    navigator.wakeLock.request('screen').then(function(lock) { wakeLock = lock; }).catch(function() {});
+}
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') requestWakeLock();
+});
 
 // ==================== FULLSCREEN ====================
 function toggleFullscreen() {
